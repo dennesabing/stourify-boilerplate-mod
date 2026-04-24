@@ -2,7 +2,6 @@
     "name": "modules/stourify",
     "description": "Stourify main module: admin panel for spots, moderation, and user management",
     "type": "library",
-    "version": "1.0.0",
     "autoload": {
         "psr-4": {
             "Modules\\Stourify\\": "src/"
