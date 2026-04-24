@@ -1,22 +1,8 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 
-export default function FollowGraph({ user }) {
-    const [data, setData] = useState({ followers: [], following: [] });
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (!user?.id) return;
-        axios.get(route('stourify.admin.users.follow-graph', user.id))
-            .then((res) => setData(res.data))
-            .finally(() => setLoading(false));
-    }, [user?.id]);
-
-    if (loading) {
-        return <div className="p-4 text-text-muted text-sm">Loading follow graph…</div>;
-    }
-
-    const UserList = ({ users, label }) => (
+function UserList({ users, label }) {
+    return (
         <div className="flex-1">
             <h3 className="font-semibold text-text-primary mb-3">
                 {label} ({users.length})
@@ -45,6 +31,28 @@ export default function FollowGraph({ user }) {
             )}
         </div>
     );
+}
+
+export default function FollowGraph({ user }) {
+    const [data, setData] = useState({ followers: [], following: [] });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        axios.get(route('stourify.admin.users.follow-graph', user.id))
+            .then((res) => setData(res.data))
+            .catch(() => setError('Failed to load follow graph.'))
+            .finally(() => setLoading(false));
+    }, [user?.id]);
+
+    if (loading) {
+        return <div className="p-4 text-text-muted text-sm">Loading follow graph…</div>;
+    }
+
+    if (error) {
+        return <div className="p-4 text-sm text-red-500">{error}</div>;
+    }
 
     return (
         <div className="p-4 flex gap-8">
