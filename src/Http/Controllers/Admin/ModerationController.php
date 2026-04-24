@@ -81,7 +81,7 @@ class ModerationController extends Controller
 
     public function deleteAndWarn(Request $request, string $type, int $id): RedirectResponse
     {
-        $request->validate(['type' => 'in:post,comment']);
+        abort_if(! in_array($type, ['post', 'comment'], true), 422);
 
         if ($type === 'post') {
             $content = Post::withoutGlobalScopes()->findOrFail($id);
