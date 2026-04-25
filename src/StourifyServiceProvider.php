@@ -3,6 +3,9 @@
 namespace Modules\Stourify;
 
 use App\Providers\ModuleBaseServiceProvider;
+use Illuminate\Support\Facades\Event;
+use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Policies\SpotPolicy;
 
 class StourifyServiceProvider extends ModuleBaseServiceProvider
 {
@@ -18,6 +21,22 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
 
     protected function policyMap(): array
     {
-        return [];
+        return [
+            Spot::class => SpotPolicy::class,
+        ];
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+        $this->registerListeners();
+    }
+
+    private function registerListeners(): void
+    {
+        Event::listen(
+            \Modules\Social\Events\PostCreated::class,
+            \Modules\Stourify\Listeners\CreateOrLinkSpotFromPost::class,
+        );
     }
 }
