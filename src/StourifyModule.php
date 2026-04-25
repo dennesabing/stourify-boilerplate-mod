@@ -21,11 +21,11 @@ class StourifyModule implements Module
         return [
             'stourify.spots.manage',
             'stourify.moderation.manage',
-            'spots.view',
-            'spots.create',
-            'spots.update',
-            'spots.delete',
-            'spots.moderate',
+            'stourify.spots.view',
+            'stourify.spots.create',
+            'stourify.spots.update',
+            'stourify.spots.delete',
+            'stourify.spots.moderate',
         ];
     }
 

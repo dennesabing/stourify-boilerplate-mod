@@ -37,7 +37,7 @@ class SpotPolicy
     private function hasModeratePermission(User $user): bool
     {
         try {
-            return $user->hasPermissionTo('spots.moderate');
+            return $user->hasPermissionTo('stourify.spots.moderate');
         } catch (\Spatie\Permission\Exceptions\PermissionDoesNotExist) {
             return false;
         }

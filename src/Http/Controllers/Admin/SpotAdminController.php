@@ -3,9 +3,9 @@
 namespace Modules\Stourify\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\Crud\CrudService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Modules\Social\Models\Post;
@@ -40,9 +40,8 @@ class SpotAdminController extends Controller
 
     public function store(SpotAdminRequest $request): RedirectResponse
     {
-        $spot = Spot::create(array_merge($request->validated(), [
+        $spot = CrudService::for(Spot::class)->create(array_merge($request->validated(), [
             'created_by' => $request->user()->id,
-            'slug'       => Str::slug($request->name),
         ]));
 
         return redirect()->route('stourify.admin.spots.show', $spot)

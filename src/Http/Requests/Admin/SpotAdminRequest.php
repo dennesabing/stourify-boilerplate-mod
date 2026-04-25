@@ -2,15 +2,10 @@
 
 namespace Modules\Stourify\Http\Requests\Admin;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Http\Requests\BaseFormRequest;
 
-class SpotAdminRequest extends FormRequest
+class SpotAdminRequest extends BaseFormRequest
 {
-    public function authorize(): bool
-    {
-        return true;
-    }
-
     public function rules(): array
     {
         return [
