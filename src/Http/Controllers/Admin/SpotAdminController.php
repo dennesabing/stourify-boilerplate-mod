@@ -57,7 +57,7 @@ class SpotAdminController extends Controller
 
     public function update(SpotAdminRequest $request, Spot $spot): RedirectResponse
     {
-        $spot->update($request->validated());
+        CrudService::for(Spot::class)->update($spot, $request->validated());
 
         return redirect()->route('stourify.admin.spots.show', $spot)
             ->with('success', 'Spot updated.');
