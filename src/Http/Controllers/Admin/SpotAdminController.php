@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Modules\Social\Models\Post;
-use Modules\Spots\Models\Spot;
+use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Http\Requests\Admin\MergeSpotRequest;
 use Modules\Stourify\Http\Requests\Admin\SpotAdminRequest;
 

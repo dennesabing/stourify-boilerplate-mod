@@ -3,7 +3,7 @@
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Social\Models\Post;
-use Modules\Spots\Models\Spot;
+use Modules\Stourify\Models\Spot;
 use Tests\Traits\InteractsWithTestSetup;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class, InteractsWithTestSetup::class);
