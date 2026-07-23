@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Stourify\Models;
 
+use App\Models\User;
 use App\Traits\BelongsToOrganization;
 use App\Traits\Cacheable;
 use App\Traits\HasOrganizationMedia;
@@ -14,13 +15,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Stourify\Database\Factories\ReviewFactory;
+use Spatie\MediaLibrary\HasMedia;
 
 /**
  * A rating and write-up on a spot. One per explorer per spot.
  *
  * @use HasFactory<ReviewFactory>
  */
-class Review extends Model
+class Review extends Model implements HasMedia
 {
     use BelongsToOrganization, Cacheable, HasFactory, HasOrganizationMedia,
         HasPermissionPrefix, HasUuid, SoftDeletes;
@@ -63,6 +65,14 @@ class Review extends Model
     public static function morphAlias(): string
     {
         return 'stourify_review';
+    }
+
+    /**
+     * The explorer who wrote the review.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function spot(): BelongsTo

@@ -1,0 +1,281 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
+use Modules\Stourify\Enums\SpotStatus;
+use Modules\Stourify\Models\Review;
+use Modules\Stourify\Models\Spot;
+use Tests\Traits\InteractsWithTestSetup;
+
+uses(RefreshDatabase::class, InteractsWithTestSetup::class);
+
+/**
+ * @var list<string>
+ */
+const REVIEWER_PERMISSIONS = [
+    'stourify.reviews.view',
+    'stourify.reviews.create',
+    'stourify.reviews.update',
+    'stourify.reviews.delete',
+];
+
+beforeEach(function (): void {
+    $this->organization = $this->setUpTestOrganization();
+    $this->seedPermissions([...REVIEWER_PERMISSIONS, 'stourify.reviews.manage']);
+
+    $this->reviewer = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+    $this->spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->reviewer->id,
+        'status' => SpotStatus::Published,
+    ]);
+});
+
+function actingAsReviewer(User $user): void
+{
+    Sanctum::actingAs($user);
+}
+
+// ---------------------------------------------------------------------------
+// CRUD
+// ---------------------------------------------------------------------------
+
+test('an explorer writes a review', function (): void {
+    actingAsReviewer($this->reviewer);
+
+    $this->postJson('/api/v1/reviews', [
+        'spot_uuid' => $this->spot->uuid,
+        'rating' => 4,
+        'body' => 'Worth the walk. Go before noon.',
+    ], orgHeader($this->organization))
+        ->assertCreated()
+        ->assertJsonPath('data.rating', 4)
+        ->assertJsonPath('data.spot_uuid', $this->spot->uuid);
+
+    $this->assertDatabaseHas('sto_reviews', [
+        'spot_id' => $this->spot->id,
+        'user_id' => $this->reviewer->id,
+        'rating' => 4,
+    ]);
+});
+
+test('a review is shown, updated and deleted by its author', function (): void {
+    actingAsReviewer($this->reviewer);
+    $review = Review::factory()->for($this->organization)->create([
+        'user_id' => $this->reviewer->id,
+        'spot_id' => $this->spot->id,
+        'rating' => 3,
+    ]);
+
+    $this->getJson("/api/v1/reviews/{$review->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.uuid', $review->uuid);
+
+    $this->patchJson("/api/v1/reviews/{$review->uuid}", [
+        'rating' => 5,
+    ], orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.rating', 5);
+
+    $this->deleteJson("/api/v1/reviews/{$review->uuid}", [], orgHeader($this->organization))
+        ->assertOk();
+
+    $this->assertSoftDeleted('sto_reviews', ['id' => $review->id]);
+});
+
+test('the list filters by spot and by author', function (): void {
+    $other = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+    $otherSpot = Spot::factory()->for($this->organization)
+        ->create(['user_id' => $other->id, 'status' => SpotStatus::Published]);
+
+    $mine = Review::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id]);
+    Review::factory()->for($this->organization)
+        ->create(['user_id' => $other->id, 'spot_id' => $otherSpot->id]);
+
+    actingAsReviewer($this->reviewer);
+
+    $bySpot = $this->getJson("/api/v1/reviews?spot_uuid={$this->spot->uuid}", orgHeader($this->organization))
+        ->assertOk()->json('data');
+    expect($bySpot)->toHaveCount(1)->and($bySpot[0]['uuid'])->toBe($mine->uuid);
+
+    $mineOnly = $this->getJson('/api/v1/reviews?mine=1', orgHeader($this->organization))
+        ->assertOk()->json('data');
+    expect($mineOnly)->toHaveCount(1)->and($mineOnly[0]['uuid'])->toBe($mine->uuid);
+});
+
+// ---------------------------------------------------------------------------
+// Rating aggregation
+// ---------------------------------------------------------------------------
+
+test('the spot rating average and count track its reviews', function (): void {
+    $a = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+    $b = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+
+    Review::factory()->for($this->organization)
+        ->create(['user_id' => $a->id, 'spot_id' => $this->spot->id, 'rating' => 5]);
+    Review::factory()->for($this->organization)
+        ->create(['user_id' => $b->id, 'spot_id' => $this->spot->id, 'rating' => 2]);
+
+    expect($this->spot->fresh()->rating_average)->toBe(3.5)
+        ->and($this->spot->fresh()->reviews_count)->toBe(2);
+});
+
+test('editing a rating recomputes the spot average', function (): void {
+    $review = Review::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id, 'rating' => 1]);
+
+    expect($this->spot->fresh()->rating_average)->toBe(1.0);
+
+    actingAsReviewer($this->reviewer);
+    $this->patchJson("/api/v1/reviews/{$review->uuid}", ['rating' => 5], orgHeader($this->organization))
+        ->assertOk();
+
+    expect($this->spot->fresh()->rating_average)->toBe(5.0)
+        ->and($this->spot->fresh()->reviews_count)->toBe(1);
+});
+
+test('deleting a review removes it from the spot average', function (): void {
+    $other = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+    $mine = Review::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id, 'rating' => 5]);
+    Review::factory()->for($this->organization)
+        ->create(['user_id' => $other->id, 'spot_id' => $this->spot->id, 'rating' => 1]);
+
+    expect($this->spot->fresh()->rating_average)->toBe(3.0);
+
+    actingAsReviewer($this->reviewer);
+    $this->deleteJson("/api/v1/reviews/{$mine->uuid}", [], orgHeader($this->organization))->assertOk();
+
+    expect($this->spot->fresh()->rating_average)->toBe(1.0)
+        ->and($this->spot->fresh()->reviews_count)->toBe(1);
+});
+
+test('a spot with no reviews reports a zero average, not null', function (): void {
+    expect($this->spot->fresh()->rating_average)->toBe(0.0)
+        ->and($this->spot->fresh()->reviews_count)->toBe(0);
+});
+
+// ---------------------------------------------------------------------------
+// The one-per-explorer rule
+// ---------------------------------------------------------------------------
+
+test('a second review of the same spot is rejected as a validation error', function (): void {
+    Review::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id]);
+
+    actingAsReviewer($this->reviewer);
+
+    $this->postJson('/api/v1/reviews', [
+        'spot_uuid' => $this->spot->uuid,
+        'rating' => 5,
+    ], orgHeader($this->organization))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['spot_uuid']);
+});
+
+test('two different explorers may review the same spot', function (): void {
+    $other = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+
+    actingAsReviewer($this->reviewer);
+    $this->postJson('/api/v1/reviews', [
+        'spot_uuid' => $this->spot->uuid, 'rating' => 4,
+    ], orgHeader($this->organization))->assertCreated();
+
+    actingAsReviewer($other);
+    $this->postJson('/api/v1/reviews', [
+        'spot_uuid' => $this->spot->uuid, 'rating' => 2,
+    ], orgHeader($this->organization))->assertCreated();
+
+    expect($this->spot->fresh()->reviews_count)->toBe(2);
+});
+
+// ---------------------------------------------------------------------------
+// Permissions
+// ---------------------------------------------------------------------------
+
+test('review endpoints reject an unauthenticated caller', function (string $method, string $uri): void {
+    $this->json($method, $uri, [], orgHeader($this->organization))->assertUnauthorized();
+})->with([
+    ['get', '/api/v1/reviews'],
+    ['post', '/api/v1/reviews'],
+]);
+
+test('listing reviews is denied without the view permission', function (): void {
+    actingAsReviewer($this->createUserWithPermissions($this->organization, []));
+
+    $this->getJson('/api/v1/reviews', orgHeader($this->organization))->assertForbidden();
+});
+
+test('one explorer cannot edit or delete another explorer\'s review', function (): void {
+    $other = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+    $review = Review::factory()->for($this->organization)
+        ->create(['user_id' => $other->id, 'spot_id' => $this->spot->id]);
+
+    actingAsReviewer($this->reviewer);
+
+    $this->patchJson("/api/v1/reviews/{$review->uuid}", ['rating' => 1], orgHeader($this->organization))
+        ->assertForbidden();
+    $this->deleteJson("/api/v1/reviews/{$review->uuid}", [], orgHeader($this->organization))
+        ->assertForbidden();
+});
+
+test('a moderator edits any review', function (): void {
+    $moderator = $this->createUserWithPermissions(
+        $this->organization, [...REVIEWER_PERMISSIONS, 'stourify.reviews.manage'],
+    );
+    $review = Review::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id]);
+
+    actingAsReviewer($moderator);
+
+    $this->patchJson("/api/v1/reviews/{$review->uuid}", ['rating' => 1], orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.rating', 1);
+});
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+test('a review requires a spot and a rating in range', function (): void {
+    actingAsReviewer($this->reviewer);
+
+    $this->postJson('/api/v1/reviews', [], orgHeader($this->organization))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['spot_uuid', 'rating']);
+
+    $this->postJson('/api/v1/reviews', [
+        'spot_uuid' => $this->spot->uuid, 'rating' => 9,
+    ], orgHeader($this->organization))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['rating']);
+});
+
+test('a review cannot be moved to a different spot', function (): void {
+    $otherSpot = Spot::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'status' => SpotStatus::Published]);
+    $review = Review::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id]);
+
+    actingAsReviewer($this->reviewer);
+    $this->patchJson("/api/v1/reviews/{$review->uuid}", [
+        'spot_uuid' => $otherSpot->uuid,
+    ], orgHeader($this->organization))->assertOk();
+
+    expect($review->fresh()->spot_id)->toBe($this->spot->id);
+});
+
+test('helpful_count is not writable by the author', function (): void {
+    $review = Review::factory()->for($this->organization)
+        ->create(['user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id, 'helpful_count' => 0]);
+
+    actingAsReviewer($this->reviewer);
+    $this->patchJson("/api/v1/reviews/{$review->uuid}", [
+        'helpful_count' => 999,
+    ], orgHeader($this->organization))->assertOk();
+
+    expect($review->fresh()->helpful_count)->toBe(0);
+});

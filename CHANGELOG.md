@@ -7,7 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-07-23
+### Added
+
+- **The spots API** — the first slice of M1. `GET|POST /api/v1/spots`,
+  `GET|PATCH|PUT|DELETE /api/v1/spots/{uuid}`, and `GET /api/v1/spots/nearby`, behind
+  `auth:sanctum` + `set_organization_from_header`, UUID-bound, every response carrying the `can`
+  index from `BaseResource`.
+- `SpotPolicy` with two tiers — moderator (`stourify.spots.manage` or a platform override role)
+  and contributor (the spot's `user_id`, holding the matching `stourify.spots.*` permission).
+  Writes are authorized by `CrudService`; reads authorize in the controller, which `CrudService`
+  never sees.
+- **Draft visibility is enforced at the query level, not only the policy.** A policy runs per
+  model, after rows are selected and paginated, so it cannot stop a list from surfacing another
+  explorer's draft. `SpotApiController::visibleTo()` constrains the SQL — discoverable spots plus
+  your own — and the new `SpotPolicy::viewAnyDraft()` ability keeps the moderator test in the
+  policy rather than duplicated in a controller. Covered by tests from both directions.
+- `SpotResource` and `CityResource`. `distance_km` appears only on nearby responses, and is
+  computed in PHP rather than SQL: `scopeNearby()` deliberately orders by *squared* planar
+  distance to avoid `SQRT`, which many SQLite builds lack, so taking the root in PHP restores
+  kilometres without reintroducing the portability problem the scope exists to avoid.
+- Form requests for index, store, update and nearby. `sort` is whitelisted to indexed or
+  denormalized columns, `per_page` is capped at 100, and the nearby `radius` is capped from
+  `config('stourify.discovery.max_radius_km')` — beyond city scale the planar approximation stops
+  holding. `status` accepts only `draft` and `published` on write; `under_review` and `removed`
+  are moderation outcomes, and `is_verified` is not a writable field at all.
+- 25 feature tests: happy path, permission denial, cross-author denial, draft leakage in both
+  directions, validation, pagination and slug collisions.
+- **The reviews API** — `/api/v1/reviews` CRUD, filterable by spot, author and rating, sortable by
+  `created_at`, `rating` or `helpful_count`. `ReviewPolicy` mirrors `SpotPolicy`'s moderator /
+  author tiers, minus any visibility test: a review has no draft state, so it is public from the
+  moment it is written and the list needs no query-level scoping.
+- **`ReviewObserver` maintains `sto_spots.rating_average` and `reviews_count`.** It lives in an
+  observer rather than the controller because the same numbers must hold for reviews arriving via
+  sync push, seeders, factories or an artisan command — a controller covers only the API. It
+  recomputes from an indexed aggregate rather than incrementing a counter, which cannot drift
+  across restores, bulk deletes or rolled-back transactions. It writes the two derived columns
+  without an authorization check, deliberately: routing it through `CrudService` would authorize
+  the *reviewer* against the spot, so every review by anyone but the spot's author would fail.
+- The one-review-per-explorer-per-spot rule now returns a 422 naming the field instead of a 500
+  from the unique index. The index stays authoritative — it is what holds under a concurrent
+  double-submit from a retrying offline client.
+- **The posts API** — `/api/v1/posts` CRUD plus `POST /api/v1/posts/{uuid}/publish`. Publishing is
+  its own route with its own ability rather than a PATCH field, so a general field update cannot
+  quietly push a draft into the feed; it is idempotent, so a retrying offline client may send it
+  twice without moving the post up the feed.
+- **Post audience rules**, enforced in two places because they have to be. `PostPolicy::view()`
+  gates a single record; `PostApiController::visibleTo()` constrains the query so a list cannot
+  page through posts the viewer was never entitled to. A post is visible to a stranger only if it
+  is *both* published and permitted by its visibility — `public` to everyone, `followers` to the
+  author's accepted followers, `private` to nobody else. A `pending` follow request does not
+  unlock followers-only content, and the follow edge is directional: being followed by an author
+  grants nothing. A dataset-driven test asserts the list and the record agree across all seven
+  combinations, since whichever is more permissive would be the leak.
+- `published_at` is set from the server clock, never accepted from the client — a device with a
+  skewed or altered clock must not be able to backdate itself up the feed.
+- 43 further feature tests across reviews and posts.
+
+### Fixed
+
+- **`Spot`, `Post` and `Review` used `HasOrganizationMedia` without implementing
+  `Spatie\MediaLibrary\HasMedia`**, which the trait's own docblock requires. The media library
+  binds a model-event listener typed against that interface, so *deleting* any of the three threw
+  a `TypeError` before the row was removed. M0 never exercised a delete, so this only surfaced
+  once the API had a destroy endpoint.
+- `Spot`, `Review` and `Post` had no `user()` relationship despite `user_id` being the contributor
+  and the column every ownership rule keys on. Added to all three, plus `Spot::owner()` for the
+  post-beta business claim — the two are distinct: the contributor never changes, the owner
+  governs only the commercial surface.
+
+### Notes
+
+- **Likes and helpful votes are not implemented yet, and `likes_count` / `helpful_count` are
+  therefore always 0.** Both are reactions in platform terms, and the boilerplate already owns
+  reactions end to end — the `Reaction` model, `HasReactions`, and a core `/api/v1/reactions`
+  controller. The right implementation is to let that surface handle the writes and have the
+  module maintain its denormalized counters from `Reaction` events, which also needs the
+  `{host}.reactions.*` permissions to be discovered from `Post` and `Review`. That is its own
+  slice, deliberately not bolted onto this one. A bare `increment()` endpoint was rejected: with
+  no per-user record it would let one client vote arbitrarily many times.
 
 ### Added
 

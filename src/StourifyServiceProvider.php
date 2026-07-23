@@ -15,6 +15,10 @@ use Modules\Stourify\Models\Report;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Models\WishlistItem;
+use Modules\Stourify\Observers\ReviewObserver;
+use Modules\Stourify\Policies\PostPolicy;
+use Modules\Stourify\Policies\ReviewPolicy;
+use Modules\Stourify\Policies\SpotPolicy;
 
 /**
  * Wires the Stourify module: routes, migrations, policies, morph aliases.
@@ -67,6 +71,10 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         }
 
         Relation::morphMap($map);
+
+        // Keeps sto_spots.rating_average and reviews_count truthful regardless
+        // of how a review was written — API, sync push, seeder or factory.
+        Review::observe(ReviewObserver::class);
     }
 
     protected function moduleClass(): string
@@ -86,6 +94,10 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
      */
     protected function policyMap(): array
     {
-        return [];
+        return [
+            Spot::class => SpotPolicy::class,
+            Review::class => ReviewPolicy::class,
+            Post::class => PostPolicy::class,
+        ];
     }
 }
