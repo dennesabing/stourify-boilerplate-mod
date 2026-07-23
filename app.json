@@ -1,0 +1,7 @@
+{
+    "name": "Stourify Module",
+    "slug": "stourify",
+    "version": "0.1.0",
+    "versionCode": 1,
+    "description": "Local spot discovery domain module — spots, posts, reviews, follows, wishlists, reports."
+}

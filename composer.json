@@ -1,0 +1,19 @@
+{
+    "name": "modules/stourify",
+    "description": "Stourify — local spot discovery: spots, posts, reviews, follows, wishlists",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Modules\\Stourify\\": "src/",
+            "Modules\\Stourify\\Database\\Factories\\": "database/factories/",
+            "Modules\\Stourify\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Stourify\\StourifyServiceProvider"
+            ]
+        }
+    }
+}
