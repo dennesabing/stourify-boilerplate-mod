@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Stourify\Models;
 
+use App\Models\User;
 use App\Traits\BelongsToOrganization;
 use App\Traits\Cacheable;
 use App\Traits\HasComments;
@@ -19,13 +20,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Stourify\Database\Factories\PostFactory;
 use Modules\Stourify\Enums\PostVisibility;
+use Spatie\MediaLibrary\HasMedia;
 
 /**
  * One explorer's visit to a spot — the unit the Home Feed renders.
  *
  * @use HasFactory<PostFactory>
  */
-class Post extends Model
+class Post extends Model implements HasMedia
 {
     use BelongsToOrganization, Cacheable, HasComments, HasFactory, HasOrganizationMedia,
         HasPermissionPrefix, HasReactions, HasTags, HasUuid, SoftDeletes;
@@ -71,6 +73,14 @@ class Post extends Model
     public static function morphAlias(): string
     {
         return 'stourify_post';
+    }
+
+    /**
+     * The explorer whose visit this post records.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function spot(): BelongsTo

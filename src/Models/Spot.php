@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Stourify\Models;
 
+use App\Models\User;
 use App\Traits\BelongsToOrganization;
 use App\Traits\Cacheable;
 use App\Traits\HasComments;
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Stourify\Database\Factories\SpotFactory;
 use Modules\Stourify\Enums\SpotStatus;
+use Spatie\MediaLibrary\HasMedia;
 
 /**
  * A place worth going to, contributed by an explorer.
@@ -31,7 +33,7 @@ use Modules\Stourify\Enums\SpotStatus;
  *
  * @use HasFactory<SpotFactory>
  */
-class Spot extends Model
+class Spot extends Model implements HasMedia
 {
     use BelongsToOrganization, Cacheable, HasComments, HasFactory, HasOrganizationMedia,
         HasPermissionPrefix, HasReactions, HasTags, HasUuid, OrganizationSearchable, SoftDeletes;
@@ -86,6 +88,23 @@ class Spot extends Model
     public static function morphAlias(): string
     {
         return 'stourify_spot';
+    }
+
+    /**
+     * The explorer who contributed this spot.
+     *
+     * Distinct from `owner`: the contributor is whoever added the place, and
+     * never changes. `owner_user_id` is set only when a business claims the
+     * spot post-beta, and governs the commercial surface, not the content.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_user_id');
     }
 
     public function city(): BelongsTo
