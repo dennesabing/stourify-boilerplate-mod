@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-24
+
+### Added
+
+- **The follow graph** — `GET|POST /api/v1/follows`, `GET|DELETE /api/v1/follows/{uuid}`,
+  `POST /api/v1/follows/{uuid}/accept`, and `GET /api/v1/follows/requests`. The same table backs
+  both the Followers and Following screens, read from opposite sides via `?direction=`.
+- **Following a private account creates a request; following a public one takes effect
+  immediately — and the client does not get to say which.** The status is derived from the
+  target's `ExplorerProfile.is_private`, never from the payload; accepting `status` from the
+  request would let any caller walk straight past a private account's gate.
+- The two parties hold different rights, which is the shape of `FollowPolicy`. Either party may
+  `delete` — the follower unfollowing, the followee rejecting a request or removing an existing
+  follower, all the same row and so one endpoint. Only the followee may `accept`; a follower who
+  could accept their own request would make private accounts meaningless.
+- **A private account's follower and following lists are visible only to that account and its
+  accepted followers.** Without this, `is_private` would hide someone's posts while leaving their
+  social graph an open book. A *pending* follower does not qualify.
+- `GET /follows/requests` is its own route rather than an index filter: "requests addressed to me"
+  is a different question from "who follows this account", is always about the caller, and is
+  never visible to anyone else. Pending edges are excluded from public follower lists entirely.
+- `ExplorerResource` — the public face of an explorer. It deliberately does not extend
+  `BaseResource`: the abilities that matter belong to the *edge*, not the person, and a `can`
+  block on a user invites a client to read it as authority over that account. Email is never
+  exposed, and a user who has never opened the app has no profile row, so every profile-sourced
+  field degrades to null.
+- `AttachesExplorerProfiles` — resolves each user's `ExplorerProfile` in one query per page via
+  `setRelation()`. `User` lives in the boilerplate, which must contain zero module references, so
+  there is no `User::stourifyProfile()` relationship to eager-load and there must never be one;
+  resolving the profile inside the resource instead would be an N+1.
+- 28 feature tests, including the directionality of the edge, the privacy of the graph, and a
+  regression guard described below.
+
+### Fixed
+
+- **`FollowPolicy::update()` denied the very write `accept` depends on.** `update` was written to
+  return `false` on the reasoning that a follow edge has no editable fields — but `accept()` goes
+  through `CrudService`, which authorizes `update`, so the accept endpoint returned 403 for the
+  one person entitled to use it. `update` and `accept` are now deliberately the same rule, since
+  the followee accepting is a follow edge's only legal mutation. A test asserts the two abilities
+  agree, so they cannot drift apart again.
+
+### Notes
+
+- Unfollowing **hard-deletes** the edge. `sto_follows` carries a unique index on
+  `(follower_id, followee_id)`, so a soft-delete tombstone would make re-following the same person
+  fail forever. `Follow` accordingly does not use `SoftDeletes`.
+- Blocking is not part of this slice — it arrives with the privacy settings in M5. Until then a
+  follow can be removed but not prevented from recurring.
+
 ## [0.3.0] - 2026-07-24
 
 ### Added

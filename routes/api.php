@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
+use Modules\Stourify\Http\Controllers\Api\V1\FollowApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\PostApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotApiController;
@@ -58,5 +59,19 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
             // Its own route, not a PATCH field: publishing is a one-way
             // transition with its own ability. See PostUpdateRequest.
             Route::post('/{post}/publish', [PostApiController::class, 'publish'])->name('publish');
+        });
+
+        Route::prefix('follows')->name('follows.')->group(function (): void {
+            // Before the /{follow} wildcard so "requests" is not read as a UUID.
+            Route::get('/requests', [FollowApiController::class, 'requests'])->name('requests');
+
+            Route::get('/', [FollowApiController::class, 'index'])->name('index');
+            Route::post('/', [FollowApiController::class, 'store'])->name('store');
+            Route::get('/{follow}', [FollowApiController::class, 'show'])->name('show');
+
+            // Accepting is the followee's alone; unfollow, reject and
+            // remove-a-follower are all the same delete from either side.
+            Route::post('/{follow}/accept', [FollowApiController::class, 'accept'])->name('accept');
+            Route::delete('/{follow}', [FollowApiController::class, 'destroy'])->name('destroy');
         });
     });
