@@ -16,6 +16,7 @@ use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Models\WishlistItem;
 use Modules\Stourify\Observers\ReviewObserver;
+use Modules\Stourify\Policies\FollowPolicy;
 use Modules\Stourify\Policies\PostPolicy;
 use Modules\Stourify\Policies\ReviewPolicy;
 use Modules\Stourify\Policies\SpotPolicy;
@@ -98,6 +99,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
             Spot::class => SpotPolicy::class,
             Review::class => ReviewPolicy::class,
             Post::class => PostPolicy::class,
+            Follow::class => FollowPolicy::class,
         ];
     }
 }
