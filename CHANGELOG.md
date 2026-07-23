@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-24
+
 ### Added
 
 - **The follow graph** — `GET|POST /api/v1/follows`, `GET|DELETE /api/v1/follows/{uuid}`,
