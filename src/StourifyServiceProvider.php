@@ -16,10 +16,13 @@ use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Models\WishlistItem;
 use Modules\Stourify\Observers\ReviewObserver;
+use Modules\Stourify\Policies\ExplorerProfilePolicy;
 use Modules\Stourify\Policies\FollowPolicy;
 use Modules\Stourify\Policies\PostPolicy;
+use Modules\Stourify\Policies\ReportPolicy;
 use Modules\Stourify\Policies\ReviewPolicy;
 use Modules\Stourify\Policies\SpotPolicy;
+use Modules\Stourify\Policies\WishlistItemPolicy;
 
 /**
  * Wires the Stourify module: routes, migrations, policies, morph aliases.
@@ -100,6 +103,9 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
             Review::class => ReviewPolicy::class,
             Post::class => PostPolicy::class,
             Follow::class => FollowPolicy::class,
+            WishlistItem::class => WishlistItemPolicy::class,
+            ExplorerProfile::class => ExplorerProfilePolicy::class,
+            Report::class => ReportPolicy::class,
         ];
     }
 }

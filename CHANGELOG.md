@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The wishlist API** — `GET|POST /api/v1/wishlist`, `GET|PATCH|DELETE /api/v1/wishlist/{uuid}`,
+  filterable by city and by offline-download state. A wishlist is private by nature — there is no
+  beta surface where anyone sees anyone else's — so it is a flat owner-only policy, and the list
+  is scoped to the caller in SQL as well as in the policy.
+- `city_id` is denormalized off the spot at save time and never accepted from the client, so the
+  Wishlist screen's group-by-city query stays single-table and cannot disagree with the spot's
+  actual city. Saving the same spot twice is a 422 rather than a 500 from the unique
+  `(user_id, spot_id)` index; unsaving hard-deletes, so a soft-delete tombstone can't make
+  re-saving fail forever (`WishlistItem` uses no `SoftDeletes`).
+- **The profile API** — `GET /api/v1/profile` (the caller's own, returning `null` data before one
+  exists rather than 404), `PATCH /api/v1/profile` (an upsert serving both the onboarding create
+  and every later edit), and `GET /api/v1/profiles/{user}` (anyone's public header).
+- Username uniqueness is platform-wide and case-insensitive: the handle is normalized to lowercase
+  and validated `unique` ignoring the caller's own row, so re-saving an unchanged username is not
+  a self-conflict. Illegal characters and uppercase are rejected with a message, not silently
+  coerced.
+- A profile header is public even for a private account — privacy gates content, not identity, so
+  `is_private` is exposed precisely so a client can render "Requested" vs "Following".
+  `shows_location_on_spots` is a setting shown only to the owner.
+- **The three header counts (spots, followers, following) are computed on read**, not read from
+  the denormalized `sto_explorer_profiles` columns. Keeping those columns truthful would need
+  `Follow` and `Spot` observers plus an initial-compute path for follows that predate a profile —
+  a drift-prone amount of machinery for three indexed `COUNT`s on a single-record read. Followers
+  and following count active edges only; a pending request is not a follower. Spots count
+  published spots only. The columns remain for a later pass if the header ever gets hot.
+- `ProfileResource`, `WishlistItemResource`, `ExplorerProfilePolicy`, `WishlistItemPolicy`, and
+  the store/update/index form requests for each.
+- 30 feature tests across the two resources.
+- **The reports API** — `GET|POST /api/v1/reports`, `GET /api/v1/reports/{uuid}`, and
+  `POST /api/v1/reports/{uuid}/resolve`. One polymorphic flow covers reporting spots, posts,
+  reviews and users. Filing is open to `stourify.reports.create`; the queue and every resolution
+  are moderators only (`stourify.reports.manage` or a platform override role) — the two audiences
+  never overlap in what they can see.
+- **A dedicated `ReportableType` allowlist (`spot`/`post`/`review`/`user`), separate from the
+  platform's attachable-morph registry.** Reportability and attachability are different questions
+  — a user is reportable but is not an attachment host — so reports own their list. The API speaks
+  in those short tokens, never a morph alias or a `Modules\…` FQCN, so the reportable surface can
+  grow without leaking internal identifiers. Comments are intentionally excluded for now; comment
+  moderation is its own later surface.
+- Filing is **idempotent** per `(reporter, subject)`: a unique index means one report per person
+  per target, and re-reporting returns the existing report rather than erroring or stacking —
+  what "report" should feel like when tapped twice. Two *different* explorers may still each
+  report the same thing.
+- Resolution stamps who resolved a report and when for the terminal outcomes (`actioned`,
+  `dismissed`), requiring a resolution note for the audit trail; moving a report back to
+  `reviewing` clears those stamps, and `pending` is not a target a moderator can push to.
+- A report is **anonymous to the reported party**: the reporter's identity reaches moderators
+  through the queue but never rides on any subject-facing surface, and no report response exposes
+  an email.
+- `ReportResource`, `ReportPolicy`, and the store / resolve / index form requests.
+- 21 feature tests, including the polymorphic subject across all four reportable kinds, the
+  alias-vs-FQCN storage distinction, idempotency, the moderator/reporter split and anonymity.
+- **The home feed** — `GET /api/v1/feed?cursor=`, a cursor-paginated stream of the posts a viewer
+  is entitled to see, newest first. Published posts only: your own drafts belong on your profile,
+  not your feed.
+- **`Post::scopeVisibleTo()` now holds the single definition of the post audience rule**, shared
+  by the feed and the post index so the two enforcement surfaces cannot drift — the classic way a
+  feed leaks is a visibility rule that the list and the feed each reimplement slightly
+  differently. The post index layers its moderator bypass on top of the scope; the feed grants no
+  such bypass, because a moderator's home feed is a consumption surface, not a moderation tool.
+  Tested directly: a moderator's feed excludes a stranger's private post.
+- **Ranking is recency (`published_at` desc, `id` desc), deliberately, not as a placeholder.** A
+  cursor is only stable against a fixed, indexed, monotonic ordering; an engagement- or
+  recency-decay score is none of those and would make a cursor skip or repeat posts as scores
+  shifted between pages. Personalized relevance is an explicit post-beta concern (the "For You"
+  engine). Recency is what composes correctly with cursors and the client's offline page cache.
+- **The feed deliberately does not use `getCachedList()`** — the one justified exception to the
+  module's read-through-cache rule. It is personalized per follow graph and cursor-keyed, so a
+  server cache would be high-cardinality and would need busting on every new post across every
+  viewer. The offline design puts feed persistence on the client (React Query, last N pages), per
+  technical-spec.md §7; the controller documents the exception.
+- 12 feed feature tests: composition, newest-first order, the drafts/private/followers visibility
+  rules end to end, the no-moderator-bypass distinction, and cursor pagination proven to neither
+  drop nor repeat a post across three pages.
+
 ## [0.4.0] - 2026-07-24
 
 ### Added
