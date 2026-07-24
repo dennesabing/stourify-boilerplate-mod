@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-25
+
+### Added
+
+- **Explorer onboarding — a registered user becomes an explorer of the `Stourify Public`
+  organization.** Stourify is a single-org consumer app: all content lives in one organization,
+  and `SetOrganizationFromHeader` requires the caller to be a *member* of the org whose UUID they
+  send (permissions alone are not enough). So without this a registered user could do nothing at
+  all. Three parts:
+  - An **`explorer` role** (`StourifyModule::roles()`, org-scoped, inheriting `user`) granting the
+    consumer permission set — the `stourify.*` view/create/update/delete permissions plus the
+    *discovered* reaction permissions on the Post and Review hosts (`posts.reactions.*`,
+    `reviews.reactions.*`), so an explorer can like a post and mark a review helpful. Moderator
+    abilities (`.manage`, `cities.manage`, `reports.manage`) are deliberately excluded.
+  - A **`JoinPublicOrganizationAsExplorer` listener** on `UserRegistered` (dispatched only for the
+    `registration` source, by both the web and mobile register endpoints) that enrols the new user
+    into the public org with the `explorer` role and points their `current_organization_id` at it.
+    Idempotent, and a no-op if the public org is not provisioned yet.
+  - A **`StourifyExplorerBackfillSeeder`** that enrols pre-existing accounts (the platform's seeded
+    users, anyone who registered before this shipped) the same way, so a seeded login can exercise
+    the app immediately. Runs after the public-org seeder and shares its one enrolment path.
+- Verified against the real seed chain: the `explorer` role ends up with 34 permissions including
+  the discovered reaction ones, and every seeded user is enrolled. 7 feature tests, including a
+  freshly-registered explorer creating a spot and liking a post end to end, and a non-member being
+  refused by the organization middleware.
+
+### Notes
+
+- Deployment: this project sets `ORG_AUTO_CREATE_PERSONAL=false` — explorers belong only to the
+  public org, not a personal one (business claims become real organizations post-beta).
+
 ## [0.8.0] - 2026-07-24
 
 ### Added
