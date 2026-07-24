@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Stourify\Database\Factories\PostFactory;
+use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Enums\PostVisibility;
 use Spatie\MediaLibrary\HasMedia;
 
@@ -95,5 +96,46 @@ class Post extends Model implements HasMedia
     {
         return $query->whereNotNull('published_at')
             ->where('visibility', PostVisibility::Public->value);
+    }
+
+    /**
+     * Constrain a query to the posts a given viewer is entitled to see.
+     *
+     * This is the single definition of the post audience rule. The post index
+     * and the home feed both call it, so the two enforcement surfaces cannot
+     * drift — if they disagreed, whichever was more permissive would leak.
+     * `PostPolicy::view()` encodes the same rule per-record; the policy tests
+     * assert the two agree across every visibility combination.
+     *
+     * A viewer always sees their own posts, published or not. Beyond that:
+     * published public posts, plus published followers-only posts by authors
+     * this viewer *actively* follows — a pending request grants nothing, and
+     * the follow edge is directional (`follower_id` is the viewer). Private
+     * posts by other authors never appear, by construction: no branch admits
+     * them.
+     *
+     * This intentionally carries NO moderator bypass. Seeing every restricted
+     * post is a management concern the index layers on top via
+     * `viewAnyRestricted`; a moderator's *feed* is still just their feed.
+     *
+     * @param  Builder<Post>  $query
+     * @return Builder<Post>
+     */
+    public function scopeVisibleTo(Builder $query, User $viewer): Builder
+    {
+        $followedAuthorIds = Follow::query()
+            ->where('follower_id', $viewer->id)
+            ->where('status', FollowStatus::Active->value)
+            ->pluck('followee_id');
+
+        return $query->where(fn (Builder $scoped) => $scoped
+            ->where('user_id', $viewer->id)
+            ->orWhere(fn (Builder $others) => $others
+                ->whereNotNull('published_at')
+                ->where(fn (Builder $audience) => $audience
+                    ->where('visibility', PostVisibility::Public->value)
+                    ->orWhere(fn (Builder $followers) => $followers
+                        ->where('visibility', PostVisibility::Followers->value)
+                        ->whereIn('user_id', $followedAuthorIds)))));
     }
 }

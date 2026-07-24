@@ -3,10 +3,14 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
+use Modules\Stourify\Http\Controllers\Api\V1\FeedApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\FollowApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\PostApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\ProfileApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\ReportApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\WishlistApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -73,5 +77,33 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
             // remove-a-follower are all the same delete from either side.
             Route::post('/{follow}/accept', [FollowApiController::class, 'accept'])->name('accept');
             Route::delete('/{follow}', [FollowApiController::class, 'destroy'])->name('destroy');
+        });
+
+        Route::prefix('wishlist')->name('wishlist.')->group(function (): void {
+            Route::get('/', [WishlistApiController::class, 'index'])->name('index');
+            Route::post('/', [WishlistApiController::class, 'store'])->name('store');
+            Route::get('/{wishlist}', [WishlistApiController::class, 'show'])->name('show');
+            Route::match(['put', 'patch'], '/{wishlist}', [WishlistApiController::class, 'update'])->name('update');
+            Route::delete('/{wishlist}', [WishlistApiController::class, 'destroy'])->name('destroy');
+        });
+
+        // The caller's own profile — singular, an upsert. Declared before the
+        // /profiles/{user} reads so "profile" is never taken as a user UUID.
+        Route::get('/profile', [ProfileApiController::class, 'me'])->name('profile.me');
+        Route::match(['put', 'patch'], '/profile', [ProfileApiController::class, 'update'])->name('profile.update');
+
+        // Any explorer's public header, keyed by their user UUID.
+        Route::get('/profiles/{user}', [ProfileApiController::class, 'show'])->name('profiles.show');
+
+        // The home feed — a ranked, cursor-paginated stream of visible posts.
+        Route::get('/feed', [FeedApiController::class, 'index'])->name('feed');
+
+        Route::prefix('reports')->name('reports.')->group(function (): void {
+            // Filing is open; the queue and resolution are moderator-gated in
+            // ReportPolicy, not by route. See ReportApiController.
+            Route::get('/', [ReportApiController::class, 'index'])->name('index');
+            Route::post('/', [ReportApiController::class, 'store'])->name('store');
+            Route::get('/{report}', [ReportApiController::class, 'show'])->name('show');
+            Route::post('/{report}/resolve', [ReportApiController::class, 'resolve'])->name('resolve');
         });
     });
