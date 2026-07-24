@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-24
+
 ### Added
 
 - **A Bruno API collection** in `bruno/` exercising the core loop end to end — auth, profile,
