@@ -1,0 +1,36 @@
+meta {
+  name: Home feed
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/v1/feed?limit=20
+  body: none
+  auth: bearer
+}
+
+params:query {
+  limit: 20
+  ~cursor:
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.meta.next_cursor: isDefined
+}
+
+docs {
+  The ranked home feed — published posts the viewer may see, newest first,
+  cursor-paginated. Each post carries `likes_count` and the viewer's own
+  `is_liked`. Page forward by copying `meta.next_cursor` into the `cursor`
+  query param.
+}

@@ -1,0 +1,30 @@
+meta {
+  name: Accept a follow request
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/v1/follows/{{follow_uuid}}/accept
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.status: eq active
+}
+
+docs {
+  Only the followee may accept, and only a pending request. Idempotent —
+  accepting an already-active follow returns it unchanged. Run this while
+  authenticated as the followee (the private account that received the request).
+}

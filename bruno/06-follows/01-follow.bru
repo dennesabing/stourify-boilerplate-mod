@@ -1,0 +1,43 @@
+meta {
+  name: Follow an explorer
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/v1/follows
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "user_uuid": "{{followee_uuid}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setEnvVar("follow_uuid", res.getBody().data.uuid);
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  Following a public account takes effect immediately (`status: active`);
+  following a private one creates a pending request the followee must accept.
+  The status is derived from the target's privacy, never sent by the client.
+  Set `followee_uuid` to another seeded user's UUID first (e.g. from
+  `GET /api/v1/profiles/{user}` or a second login).
+}

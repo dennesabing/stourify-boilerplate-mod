@@ -1,0 +1,38 @@
+meta {
+  name: Create/update my profile
+  type: http
+  seq: 1
+}
+
+patch {
+  url: {{base_url}}/api/v1/profile
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "username": "gensan_wanderer",
+    "bio": "Chasing sunsets around Sarangani Bay.",
+    "interests": ["coast", "foodie", "nature"]
+  }
+}
+
+assert {
+  res.status: lte 201
+  res.body.data.username: eq gensan_wanderer
+}
+
+docs {
+  An upsert — the same endpoint serves the onboarding create and every later
+  edit. Username is platform-wide unique and lowercase. On a fresh account this
+  returns 201; on an existing profile, 200.
+}

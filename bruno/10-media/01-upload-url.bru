@@ -1,0 +1,49 @@
+meta {
+  name: Request presigned upload URL
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/v1/media/upload-url
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "filename": "sunset.jpg",
+    "content_type": "image/jpeg",
+    "model_type": "stourify_post",
+    "model_uuid": "{{post_uuid}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setEnvVar("media_key", res.getBody().data.key);
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.data.url: isDefined
+  res.body.data.key: isDefined
+}
+
+docs {
+  Step 1 of the presigned media flow (a boilerplate feature). Returns a
+  presigned PUT `url` and the pending `key`. The device then PUTs the file bytes
+  straight to that URL (object storage), NOT through the app server — do that in
+  Bruno with a raw PUT to `data.url`, or in the mobile client. Then call attach.
+  Requires MEDIA_DISK=spaces with credentials configured. The host is addressed
+  by `model_uuid` (the post's UUID), consistent with reactions and reports.
+}

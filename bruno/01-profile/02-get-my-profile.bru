@@ -1,0 +1,28 @@
+meta {
+  name: Get my profile
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/v1/profile
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  The caller's own profile, with the computed spots / followers / following
+  counts. Returns `data: null` before a profile has been created.
+}

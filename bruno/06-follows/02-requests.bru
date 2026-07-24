@@ -1,0 +1,29 @@
+meta {
+  name: Pending follow requests
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/v1/follows/requests
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Follow requests awaiting the caller's decision — visible only to the caller,
+  and only pending ones. Deliberately uncached so an accepted request vanishes
+  immediately.
+}

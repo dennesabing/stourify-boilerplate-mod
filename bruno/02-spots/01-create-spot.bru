@@ -1,0 +1,49 @@
+meta {
+  name: Create spot
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/v1/spots
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "title": "Kalaklan Lighthouse",
+    "description": "Best light about an hour before dusk. Bring water.",
+    "latitude": 6.1164,
+    "longitude": 125.1716,
+    "address": "Kalaklan, General Santos City",
+    "categories": ["coast", "nature"],
+    "status": "published"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setEnvVar("spot_uuid", res.getBody().data.uuid);
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.data.uuid: isDefined
+  res.body.data.status: eq published
+}
+
+docs {
+  Creates a spot and stores its UUID for the later requests (post, review,
+  wishlist). Omit `status` to create a draft that only you can see until
+  published.
+}

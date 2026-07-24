@@ -1,0 +1,35 @@
+meta {
+  name: Discovery search
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/v1/discover/search?q=kalaklan
+  body: none
+  auth: bearer
+}
+
+params:query {
+  q: kalaklan
+  ~type:
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Search across spots, cities and people. Omit `type` for a capped preview of
+  all three (the "All" tab); set `type` to `spots`, `cities` or `people` for a
+  single paginated tab. Only discoverable spots surface; people are matched by
+  handle. `q` needs at least two characters.
+}

@@ -92,6 +92,12 @@ class FollowApiController extends Controller
      * Its own route rather than an index filter, because "requests addressed to
      * me" is a different question from "who follows this account" — it is
      * always about the caller and is never visible to anyone else.
+     *
+     * Deliberately uncached, unlike index(): this is a notifications-style
+     * surface where a request must disappear the instant it is accepted or
+     * rejected. Immediacy beats a cache here, the same trade the feed makes —
+     * the follower/following lists cache because they are read far more often
+     * than they change, which is the opposite profile.
      */
     public function requests(FollowIndexRequest $request): AnonymousResourceCollection
     {
