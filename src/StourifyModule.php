@@ -10,6 +10,7 @@ use App\Support\InjectedFormField;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\Request;
+use Modules\Stourify\Database\Seeders\StourifyExplorerBackfillSeeder;
 use Modules\Stourify\Database\Seeders\StourifyPublicOrganizationSeeder;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
@@ -70,6 +71,61 @@ class StourifyModule implements Module
     }
 
     /**
+     * The permissions every explorer holds — the consumer role's grant.
+     *
+     * The module's own `stourify.*` permissions plus the *discovered* reaction
+     * permissions on the Post and Review hosts (`posts.reactions.*`,
+     * `reviews.reactions.*`), so an explorer can like a post and mark a review
+     * helpful. Moderator-only abilities (`.manage`, `cities.manage`,
+     * `reports.manage`) are deliberately absent — those belong to a moderator
+     * role, not the default consumer.
+     *
+     * @var list<string>
+     */
+    public const EXPLORER_PERMISSIONS = [
+        'stourify.spots.view',
+        'stourify.spots.create',
+        'stourify.spots.update',
+        'stourify.spots.delete',
+        'stourify.posts.view',
+        'stourify.posts.create',
+        'stourify.posts.update',
+        'stourify.posts.delete',
+        'stourify.reviews.view',
+        'stourify.reviews.create',
+        'stourify.reviews.update',
+        'stourify.reviews.delete',
+        'stourify.follows.manage',
+        'stourify.wishlist.manage',
+        'stourify.cities.view',
+        'stourify.reports.create',
+        'posts.reactions.view',
+        'posts.reactions.create',
+        'reviews.reactions.view',
+        'reviews.reactions.create',
+    ];
+
+    /**
+     * The `explorer` role — the consumer role in the `Stourify Public`
+     * organization. Org-scoped (a user holds it within that org), inheriting
+     * the platform's base `user` role. Merged into `config('roles')` and synced
+     * by the RoleSeeder.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function roles(): array
+    {
+        return [
+            'explorer' => [
+                'global' => false,
+                'description' => 'A Stourify explorer — the consumer role within the public organization.',
+                'inherits' => 'user',
+                'permissions' => self::EXPLORER_PERMISSIONS,
+            ],
+        ];
+    }
+
+    /**
      * @return array<int, class-string<Model>>
      */
     public function searchableModels(): array
@@ -87,7 +143,9 @@ class StourifyModule implements Module
     public function seeders(): array
     {
         return [
+            // Order matters: the org must exist before users are enrolled into it.
             StourifyPublicOrganizationSeeder::class,
+            StourifyExplorerBackfillSeeder::class,
         ];
     }
 

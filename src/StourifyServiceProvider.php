@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Modules\Stourify;
 
+use App\Events\Domain\UserRegistered;
 use App\Models\Reaction;
 use App\Providers\ModuleBaseServiceProvider;
 use App\Registries\ModuleRegistry;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Support\Facades\Event;
+use Modules\Stourify\Listeners\JoinPublicOrganizationAsExplorer;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Follow;
@@ -85,6 +88,10 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         // Keeps sto_posts.likes_count and sto_reviews.helpful_count truthful as
         // reactions come and go through the platform's reaction endpoints.
         Reaction::observe(ReactionCountObserver::class);
+
+        // Every newly-registered user becomes an explorer of the public org —
+        // membership is required to act on any of its content.
+        Event::listen(UserRegistered::class, JoinPublicOrganizationAsExplorer::class);
     }
 
     protected function moduleClass(): string
