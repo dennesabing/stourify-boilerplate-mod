@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-24
+
+### Added
+
+- **Post likes and review "helpful" votes**, on the platform's existing reaction subsystem — the
+  writes go through the boilerplate's `POST /api/v1/reactions` endpoint (toggle, one per explorer
+  per host, deduplicated by its unique index), so the module adds no like/unlike routes of its own.
+- `Review` now uses `HasReactions`. Its "helpful" vote rides on a reaction (`helpful`) rather than a
+  bare counter, because per-user votes need a per-user record — a bare counter cannot stop one
+  person voting many times. `helpful_count` remains as the denormalized column the Reviews screen
+  sorts on, kept truthful from those reactions.
+- Each host narrows the reaction set it accepts: a `Post` accepts only `like`, a `Review` only
+  `helpful` (`supportedReactions()`), enforced by the platform's `ReactionCrudService`. Liking a
+  post with `love`, or a review with `like`, is a 422.
+- **`ReactionCountObserver` keeps `sto_posts.likes_count` and `sto_reviews.helpful_count`
+  truthful.** These are denormalized because the feed and Reviews screen render and sort on them
+  across many rows — counting per row on read would be an N+1. It observes the platform `Reaction`
+  model (so it fires for reactions on any host; `instanceof` guards limit it to posts and reviews)
+  and *recomputes* the count from an indexed aggregate rather than incrementing, so it cannot drift
+  across a toggle, a switch, a cascade or a rolled-back transaction. Counters are updated with a
+  direct column write (no `updated_at` churn, no event recursion) plus an explicit cache clear.
+- **`is_liked` / `marked_helpful`** on the post and review resources — whether the *caller* has
+  reacted, which is per-viewer and cannot be denormalized. The read paths (feed, post & review
+  index/show) eager-load the caller's own reactions via `LoadsViewerReactions`, one query per page
+  rather than one per row; the flags are absent, not false, when not evaluated.
+- 10 feature tests driving the real reaction endpoint: like/unlike a post, mark/unmark a review,
+  the per-viewer flag, feed integration, the per-host type constraints, and that a directly-deleted
+  reaction still corrects the counter (proving the recompute, not an increment).
+
 ## [0.6.0] - 2026-07-24
 
 ### Added

@@ -9,6 +9,7 @@ use App\Traits\BelongsToOrganization;
 use App\Traits\Cacheable;
 use App\Traits\HasOrganizationMedia;
 use App\Traits\HasPermissionPrefix;
+use App\Traits\HasReactions;
 use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,7 +26,16 @@ use Spatie\MediaLibrary\HasMedia;
 class Review extends Model implements HasMedia
 {
     use BelongsToOrganization, Cacheable, HasFactory, HasOrganizationMedia,
-        HasPermissionPrefix, HasUuid, SoftDeletes;
+        HasPermissionPrefix, HasReactions, HasUuid, SoftDeletes;
+
+    /**
+     * A review's only reaction is a "helpful" vote. It rides on the platform's
+     * reaction subsystem — one per explorer, toggleable, deduplicated by the
+     * unique reaction index — rather than a bare counter, which could not stop
+     * one person voting many times. `helpful_count` remains as the denormalized
+     * column the Reviews screen sorts on, kept truthful from these reactions.
+     */
+    public const HELPFUL_REACTION = 'helpful';
 
     protected $table = 'sto_reviews';
 
@@ -65,6 +75,16 @@ class Review extends Model implements HasMedia
     public static function morphAlias(): string
     {
         return 'stourify_review';
+    }
+
+    /**
+     * A review accepts only the "helpful" reaction — see HELPFUL_REACTION.
+     *
+     * @return list<string>
+     */
+    public function supportedReactions(): array
+    {
+        return [self::HELPFUL_REACTION];
     }
 
     /**

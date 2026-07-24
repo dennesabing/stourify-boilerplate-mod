@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Stourify;
 
+use App\Models\Reaction;
 use App\Providers\ModuleBaseServiceProvider;
 use App\Registries\ModuleRegistry;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -15,6 +16,7 @@ use Modules\Stourify\Models\Report;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Models\WishlistItem;
+use Modules\Stourify\Observers\ReactionCountObserver;
 use Modules\Stourify\Observers\ReviewObserver;
 use Modules\Stourify\Policies\ExplorerProfilePolicy;
 use Modules\Stourify\Policies\FollowPolicy;
@@ -79,6 +81,10 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         // Keeps sto_spots.rating_average and reviews_count truthful regardless
         // of how a review was written — API, sync push, seeder or factory.
         Review::observe(ReviewObserver::class);
+
+        // Keeps sto_posts.likes_count and sto_reviews.helpful_count truthful as
+        // reactions come and go through the platform's reaction endpoints.
+        Reaction::observe(ReactionCountObserver::class);
     }
 
     protected function moduleClass(): string

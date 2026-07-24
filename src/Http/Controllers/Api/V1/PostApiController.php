@@ -11,6 +11,7 @@ use App\Services\OrganizationContext;
 use App\Traits\ApiResponses;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Modules\Stourify\Enums\PostVisibility;
@@ -21,6 +22,7 @@ use Modules\Stourify\Http\Resources\PostResource;
 use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Policies\PostPolicy;
+use Modules\Stourify\Support\LoadsViewerReactions;
 
 /**
  * Posts — one explorer's visit to a spot, and the unit the Home Feed renders.
@@ -35,7 +37,7 @@ use Modules\Stourify\Policies\PostPolicy;
  */
 class PostApiController extends Controller
 {
-    use ApiResponses;
+    use ApiResponses, LoadsViewerReactions;
 
     public function index(PostIndexRequest $request): AnonymousResourceCollection
     {
@@ -53,7 +55,7 @@ class PostApiController extends Controller
         );
 
         $posts = Post::getCachedList($cacheKey, fn (): LengthAwarePaginator => $this
-            ->visibleTo(Post::query(), $user)
+            ->withViewerReaction($this->visibleTo(Post::query(), $user), $user)
             ->with(['spot', 'user'])
             ->when(! empty($filters['spot_uuid']), fn (Builder $q) => $q->whereHas(
                 'spot', fn (Builder $spot) => $spot->where('uuid', $filters['spot_uuid'])
@@ -65,11 +67,13 @@ class PostApiController extends Controller
         return PostResource::collection($posts);
     }
 
-    public function show(Post $post): JsonResponse
+    public function show(Request $request, Post $post): JsonResponse
     {
         $this->authorize('view', $post);
 
-        return $this->success(new PostResource($post->load(['spot', 'user'])));
+        $post->load(['spot', 'user', 'reactions' => fn ($q) => $q->where('user_id', $request->user()->id)]);
+
+        return $this->success(new PostResource($post));
     }
 
     public function store(PostStoreRequest $request): JsonResponse

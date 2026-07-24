@@ -26,6 +26,14 @@ class ReviewResource extends BaseResource
             'body' => $review->body,
             'helpful_count' => (int) $review->helpful_count,
 
+            // Present only when the viewer's own reaction was eager-loaded —
+            // whether the caller has already marked this review helpful. Absent
+            // rather than false when not evaluated.
+            'marked_helpful' => $this->when(
+                $review->relationLoaded('reactions'),
+                fn (): bool => $review->reactions->contains('type', Review::HELPFUL_REACTION),
+            ),
+
             'spot_uuid' => $this->whenLoaded('spot', fn () => $review->spot->uuid),
             'author_uuid' => $this->whenLoaded('user', fn () => $review->user->uuid),
 
