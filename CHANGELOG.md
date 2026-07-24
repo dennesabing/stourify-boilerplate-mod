@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-24
+
+### Added
+
+- **Discovery search** — `GET /api/v1/discover/search?q=&type=`, across spots, cities and people.
+  `type` returns one paginated result set for its tab (`spots` / `cities` / `people`); omitting it
+  returns a capped preview of all three for the "All" tab. Runs through Scout (Meilisearch in
+  production, the collection driver in tests), org-scoped by `OrganizationSearchable`.
+- **Only discoverable spots are returned** — a search is a discovery surface, so a draft never
+  appears, the same rule the map and nearby follow (enforced via a Scout `->query()` published
+  constraint). People and cities carry no such filter: a profile header is public even for a
+  private account (you can find someone to request to follow), and cities are public reference
+  data. A private account is findable by handle; a test asserts it.
+- **`ExplorerProfile` is now Scout-searchable** (`OrganizationSearchable`, registered in
+  `StourifyModule::searchableModels()`), indexing the handle and bio — the two things a person
+  types to find someone. Email is deliberately not indexed: it lives on `User`, not the profile,
+  and must not become searchable through the back door.
+- `PersonResource` — the compact people-search card, the profile-sourced counterpart to
+  `ExplorerResource`. No follower counts (a search list does not need them and computing them per
+  hit is a fan-out) and never an email.
+- 11 feature tests: per-type matching, the draft exclusion, the private-account-findable rule, the
+  grouped preview and its cap, and validation/permission gating.
+
+### Notes
+
+- **This is deliberately not the boilerplate's generic `/api/v1/search`.** That endpoint already
+  pulls every module's `searchableModels()`, but it applies no domain filtering — it would surface
+  draft spots — and returns a flat, type-agnostic shape rather than the tabbed spots/cities/people
+  result the Discover screen needs. The module owns `/discover/search` for that reason; the
+  generic endpoint is left untouched.
+- Tags are not a search section yet. Tags are the boilerplate's attachable, not a module model, so
+  tag search is a later addition rather than part of this slice.
+
 ## [0.5.0] - 2026-07-24
 
 ### Added

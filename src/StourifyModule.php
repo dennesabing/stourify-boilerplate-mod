@@ -12,6 +12,7 @@ use Illuminate\Database\Seeder;
 use Illuminate\Http\Request;
 use Modules\Stourify\Database\Seeders\StourifyPublicOrganizationSeeder;
 use Modules\Stourify\Models\City;
+use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Spot;
 
 /**
@@ -76,6 +77,7 @@ class StourifyModule implements Module
         return [
             Spot::class,
             City::class,
+            ExplorerProfile::class,
         ];
     }
 

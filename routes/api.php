@@ -9,6 +9,7 @@ use Modules\Stourify\Http\Controllers\Api\V1\PostApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ProfileApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReportApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\SearchApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\WishlistApiController;
 
@@ -97,6 +98,10 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
 
         // The home feed — a ranked, cursor-paginated stream of visible posts.
         Route::get('/feed', [FeedApiController::class, 'index'])->name('feed');
+
+        // Discovery search. Namespaced under /discover so it does not collide
+        // with the boilerplate's generic /api/v1/search — see SearchApiController.
+        Route::get('/discover/search', [SearchApiController::class, 'index'])->name('discover.search');
 
         Route::prefix('reports')->name('reports.')->group(function (): void {
             // Filing is open; the queue and resolution are moderator-gated in
