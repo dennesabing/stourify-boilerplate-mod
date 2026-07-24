@@ -10,6 +10,7 @@ use App\Services\OrganizationContext;
 use App\Traits\ApiResponses;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Modules\Stourify\Http\Requests\ReviewIndexRequest;
@@ -19,6 +20,7 @@ use Modules\Stourify\Http\Resources\ReviewResource;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Observers\ReviewObserver;
+use Modules\Stourify\Support\LoadsViewerReactions;
 
 /**
  * Reviews — a rating and write-up, one per explorer per spot.
@@ -35,7 +37,7 @@ use Modules\Stourify\Observers\ReviewObserver;
  */
 class ReviewApiController extends Controller
 {
-    use ApiResponses;
+    use ApiResponses, LoadsViewerReactions;
 
     public function index(ReviewIndexRequest $request): AnonymousResourceCollection
     {
@@ -52,7 +54,8 @@ class ReviewApiController extends Controller
             hash('sha256', json_encode($filters) ?: ''),
         );
 
-        $reviews = Review::getCachedList($cacheKey, fn (): LengthAwarePaginator => Review::query()
+        $reviews = Review::getCachedList($cacheKey, fn (): LengthAwarePaginator => $this
+            ->withViewerReaction(Review::query(), $request->user())
             ->with(['spot', 'user'])
             ->when(! empty($filters['spot_uuid']), fn (Builder $q) => $q->whereHas(
                 'spot', fn (Builder $spot) => $spot->where('uuid', $filters['spot_uuid'])
@@ -65,11 +68,13 @@ class ReviewApiController extends Controller
         return ReviewResource::collection($reviews);
     }
 
-    public function show(Review $review): JsonResponse
+    public function show(Request $request, Review $review): JsonResponse
     {
         $this->authorize('view', $review);
 
-        return $this->success(new ReviewResource($review->load(['spot', 'user'])));
+        $review->load(['spot', 'user', 'reactions' => fn ($q) => $q->where('user_id', $request->user()->id)]);
+
+        return $this->success(new ReviewResource($review));
     }
 
     public function store(ReviewStoreRequest $request): JsonResponse

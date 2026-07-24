@@ -9,6 +9,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Modules\Stourify\Http\Requests\FeedIndexRequest;
 use Modules\Stourify\Http\Resources\PostResource;
 use Modules\Stourify\Models\Post;
+use Modules\Stourify\Support\LoadsViewerReactions;
 
 /**
  * The home feed — the ranked stream of posts on the Home tab.
@@ -39,6 +40,8 @@ use Modules\Stourify\Models\Post;
  */
 class FeedApiController extends Controller
 {
+    use LoadsViewerReactions;
+
     /**
      * A cursor page of the viewer's home feed.
      */
@@ -49,10 +52,12 @@ class FeedApiController extends Controller
         $user = $request->user();
         $limit = (int) ($request->validated('limit') ?? 20);
 
-        $posts = Post::query()
+        $query = Post::query()
             ->visibleTo($user)
             ->whereNotNull('published_at')
-            ->with(['spot', 'user'])
+            ->with(['spot', 'user']);
+
+        $posts = $this->withViewerReaction($query, $user)
             ->orderByDesc('published_at')
             ->orderByDesc('id')
             ->cursorPaginate($limit)

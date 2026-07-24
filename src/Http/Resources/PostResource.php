@@ -39,6 +39,15 @@ class PostResource extends BaseResource
             'likes_count' => (int) $post->likes_count,
             'comments_count' => (int) $post->comments_count,
 
+            // Present only when the viewer's own reaction was eager-loaded (the
+            // read paths scope the `reactions` relation to the caller). Absent,
+            // not false, otherwise — so a client can tell "not evaluated" from
+            // "not liked" rather than rendering a hollow heart on a cold field.
+            'is_liked' => $this->when(
+                $post->relationLoaded('reactions'),
+                fn (): bool => $post->reactions->contains('type', Post::LIKE_REACTION),
+            ),
+
             'spot' => new SpotResource($this->whenLoaded('spot')),
             'author_uuid' => $this->whenLoaded('user', fn () => $post->user->uuid),
 

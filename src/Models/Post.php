@@ -33,6 +33,14 @@ class Post extends Model implements HasMedia
     use BelongsToOrganization, Cacheable, HasComments, HasFactory, HasOrganizationMedia,
         HasPermissionPrefix, HasReactions, HasTags, HasUuid, SoftDeletes;
 
+    /**
+     * A post's only reaction is a "like". The platform's reaction subsystem
+     * supports a richer set (love, haha, …); a post narrows it to one, so
+     * `likes_count` is unambiguous and the UI is a single heart. Widening this
+     * later is a deliberate product decision, not an accident of the default.
+     */
+    public const LIKE_REACTION = 'like';
+
     protected $table = 'sto_posts';
 
     /**
@@ -74,6 +82,17 @@ class Post extends Model implements HasMedia
     public static function morphAlias(): string
     {
         return 'stourify_post';
+    }
+
+    /**
+     * A post accepts only the "like" reaction — see LIKE_REACTION. The base
+     * trait would otherwise accept the whole configured set.
+     *
+     * @return list<string>
+     */
+    public function supportedReactions(): array
+    {
+        return [self::LIKE_REACTION];
     }
 
     /**
