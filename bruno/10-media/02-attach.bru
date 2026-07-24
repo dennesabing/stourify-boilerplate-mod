@@ -1,0 +1,38 @@
+meta {
+  name: Attach uploaded object to host
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/v1/media/attach
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "key": "{{media_key}}",
+    "name": "Sunset",
+    "model_type": "stourify_post",
+    "model_uuid": "{{post_uuid}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  Step 2 of the presigned flow: binds the object you PUT to the pending `key`
+  onto its host (addressed by `model_uuid`). Only a pending key that actually
+  exists is attachable; the size ceiling is enforced here.
+}

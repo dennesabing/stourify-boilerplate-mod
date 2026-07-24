@@ -1,0 +1,38 @@
+meta {
+  name: Mark a review helpful (toggle)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/v1/reactions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "reactable_type": "stourify_review",
+    "reactable_uuid": "{{review_uuid}}",
+    "type": "helpful"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.counts.helpful: isDefined
+}
+
+docs {
+  A "helpful" vote is a reaction of type `helpful` on a review — the same shared
+  reaction endpoint as a like, deduplicated one-per-explorer. A review accepts
+  only `helpful`; `like` is a 422. Drives the review's `helpful_count`.
+}

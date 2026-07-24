@@ -1,0 +1,29 @@
+meta {
+  name: Show spot
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/api/v1/spots/{{spot_uuid}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.uuid: eq {{spot_uuid}}
+}
+
+docs {
+  A single spot with its city, contributor, rating aggregates and the `can`
+  permission index.
+}

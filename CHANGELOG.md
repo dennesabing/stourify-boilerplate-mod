@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-24
+
+### Added
+
+- **A Bruno API collection** in `bruno/` exercising the core loop end to end — auth, profile,
+  spots, posts, feed, likes, reviews, helpful votes, follows, wishlist, search, reports and media.
+  Plain-text `.bru` files, version-controlled and diffable, satisfying the M1 milestone's
+  "collection exercises the full core loop against a seeded DB" gate. Building it surfaced the
+  media host-id/UUID gap fixed in `saas-boilerplate` v1.22.0.
+
+### Changed
+
+- `FollowApiController::requests()` documents why it is deliberately uncached (a notifications-style
+  surface needs an accepted request to vanish immediately), distinguishing it from the cached
+  followers/following lists — a post-implementation sweep note, not a behavior change.
+
 ## [0.7.0] - 2026-07-24
 
 ### Added

@@ -1,0 +1,35 @@
+meta {
+  name: Nearby spots
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=5
+  body: none
+  auth: bearer
+}
+
+params:query {
+  lat: 6.1164
+  lng: 125.1716
+  radius: 5
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Discoverable spots within `radius` km, nearest first, each carrying a
+  `distance_km`. Drafts never appear. The radius is capped at
+  `STOURIFY_MAX_RADIUS_KM` (50 by default).
+}

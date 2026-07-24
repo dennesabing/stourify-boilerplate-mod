@@ -1,0 +1,39 @@
+meta {
+  name: Like a post (toggle)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/v1/reactions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "reactable_type": "stourify_post",
+    "reactable_uuid": "{{post_uuid}}",
+    "type": "like"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.counts.like: isDefined
+}
+
+docs {
+  Likes are the platform's reaction subsystem, not a Stourify route — this is
+  the shared `POST /api/v1/reactions` endpoint. It toggles: send it once to
+  like, again to unlike. A post accepts only `like`; sending `love` is a 422.
+  The post's `likes_count` updates from this via ReactionCountObserver.
+}

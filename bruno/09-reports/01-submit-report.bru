@@ -1,0 +1,39 @@
+meta {
+  name: Report a spot
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/v1/reports
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "reportable_type": "spot",
+    "reportable_uuid": "{{spot_uuid}}",
+    "reason": "wrong_info",
+    "details": "The photos are of a different place entirely."
+  }
+}
+
+assert {
+  res.status: lte 201
+}
+
+docs {
+  Files a report against a spot (also `post`, `review` or `user`). Filing is
+  idempotent per (reporter, subject) — re-reporting returns the existing report.
+  `details` is required when `reason` is `other`. The queue and resolution are
+  moderator-only.
+}

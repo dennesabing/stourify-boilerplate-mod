@@ -1,0 +1,37 @@
+meta {
+  name: Login (mobile token)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/v1/mobile/auth/token
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{email}}",
+    "password": "{{password}}",
+    "device_name": "bruno-core-loop"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setEnvVar("token", res.getBody().data.token);
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.token: isDefined
+}
+
+docs {
+  Issues a Sanctum bearer token for the mobile client and stores it in the
+  `token` environment variable. Every later request in this collection sends it.
+  Seed a login first: `php artisan db:seed --class=E2eSeeder` provides
+  owner@example.com / password.
+}

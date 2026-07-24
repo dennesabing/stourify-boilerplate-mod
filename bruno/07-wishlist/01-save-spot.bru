@@ -1,0 +1,35 @@
+meta {
+  name: Save a spot
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/api/v1/wishlist
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "spot_uuid": "{{spot_uuid}}",
+    "note": "Sunset run — bring the wide lens."
+  }
+}
+
+assert {
+  res.status: eq 201
+}
+
+docs {
+  Saves a spot to the caller's wishlist. Saving the same spot twice is a 422.
+  The item inherits the spot's city, so the Wishlist screen can group by city.
+}
