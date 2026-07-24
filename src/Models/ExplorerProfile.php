@@ -9,6 +9,7 @@ use App\Traits\BelongsToOrganization;
 use App\Traits\Cacheable;
 use App\Traits\HasPermissionPrefix;
 use App\Traits\HasUuid;
+use App\Traits\OrganizationSearchable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,7 +26,8 @@ use Modules\Stourify\Database\Factories\ExplorerProfileFactory;
  */
 class ExplorerProfile extends Model
 {
-    use BelongsToOrganization, Cacheable, HasFactory, HasPermissionPrefix, HasUuid;
+    use BelongsToOrganization, Cacheable, HasFactory, HasPermissionPrefix, HasUuid,
+        OrganizationSearchable;
 
     protected $table = 'sto_explorer_profiles';
 
@@ -79,5 +81,29 @@ class ExplorerProfile extends Model
     public function homeCity(): BelongsTo
     {
         return $this->belongsTo(City::class, 'home_city_id');
+    }
+
+    public function searchableAs(): string
+    {
+        return 'sto_explorer_profiles';
+    }
+
+    /**
+     * People search matches the handle and the bio — the two things a person
+     * types when looking for someone. Email is never indexed: it lives on
+     * `User`, not here, and must not become searchable through the back door.
+     *
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'uuid' => $this->uuid,
+            'organization_id' => $this->organization_id,
+            'user_id' => $this->user_id,
+            'username' => $this->username,
+            'bio' => $this->bio,
+        ];
     }
 }
