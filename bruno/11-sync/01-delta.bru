@@ -1,0 +1,43 @@
+meta {
+  name: Delta (pull)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/v1/stourify/sync/delta?since=
+  body: none
+  auth: bearer
+}
+
+params:query {
+  ~since: 2026-07-01T00:00:00+00:00
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.server_time: isDefined
+}
+
+docs {
+  The offline-sync pull. Returns one { created, updated, deleted } bucket per
+  synced table (sto_spots, sto_reviews, sto_wishlist_items, sto_follows,
+  sto_explorer_profiles, sto_cities) plus a server_time.
+
+  The body is the payload itself — NOT wrapped in a `data` envelope — because
+  offline-sync-core reads the delta with getRaw.
+
+  Disable `since` (it is off by default here) for a first sync: everything in
+  scope comes back in `created`. Otherwise store the previous response's
+  `server_time` verbatim and send it back as `since` — it is the authoritative
+  cursor. Rows are the caller's own, except cities, which are global reference
+  data.
+}

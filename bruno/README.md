@@ -34,6 +34,7 @@ use (`token`, `org_uuid`, `spot_uuid`, `post_uuid`, `review_uuid`).
 | 08 | discover | Search spots / cities / people |
 | 09 | reports | File a report |
 | 10 | media | Presigned upload URL + attach (boilerplate feature) |
+| 11 | sync | Offline-sync delta (pull) and push (drain) |
 
 Every request after `00-auth` sends `Authorization: Bearer {{token}}` and
 `X-Organization-Id: {{org_uuid}}`.
@@ -47,5 +48,8 @@ Every request after `00-auth` sends `Authorization: Bearer {{token}}` and
 - **Media (folder 10)** addresses the host by `model_uuid`, consistent with reactions and reports.
   Requires `MEDIA_DISK=spaces` with credentials configured; between the two steps the client PUTs
   the file bytes to the presigned URL directly (not through the app server).
+- **Sync (folder 11)** is the mobile client's contract, not a screen. The delta body is the payload
+  itself (no `data` envelope); the push response uses one. Run `02-push` twice — the second run is
+  the idempotency guarantee, and must not create a second spot.
 - Reacting requires the discovered `posts.reactions.create` / `reviews.reactions.create`
   permissions granted to the explorer's role at seed time.
