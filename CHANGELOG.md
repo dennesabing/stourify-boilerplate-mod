@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-29
+
 ### Added
 
 - **M2a — the backend offline-sync contract**: `GET /api/v1/stourify/sync/delta?since=` (pull) and
@@ -25,7 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Delta** returns `{ created, updated, deleted }` per table plus an authoritative `server_time`
     the client stores verbatim as its next cursor. A row appears in exactly one of created/updated.
     Absent `since` → the full scoped set in `created` (first sync). The body is the payload
-    directly, **not** a `data` envelope, because offline-sync-core reads it with `getRaw`.
+    directly, **not** a `data` envelope. (offline-sync-core reads it with `client.get`, not
+    `getRaw` — `syncEngine.ts:70`. `get` unwraps `data` only when present and otherwise returns
+    the body, so an unwrapped delta deserializes either way.)
   - **`SyncSerializer`** emits a flat row from an explicit per-table column allowlist — integer `id`
     and integer FKs preserved (the client keys them as `server_id`), JSON columns as arrays,
     timestamps ISO8601. Never the API-Resource shape: no `can`, no nested relations, no column
