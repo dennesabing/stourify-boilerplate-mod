@@ -21,6 +21,7 @@ use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Models\WishlistItem;
 use Modules\Stourify\Observers\ReactionCountObserver;
 use Modules\Stourify\Observers\ReviewObserver;
+use Modules\Stourify\Observers\SyncTombstoneObserver;
 use Modules\Stourify\Policies\ExplorerProfilePolicy;
 use Modules\Stourify\Policies\FollowPolicy;
 use Modules\Stourify\Policies\PostPolicy;
@@ -28,6 +29,7 @@ use Modules\Stourify\Policies\ReportPolicy;
 use Modules\Stourify\Policies\ReviewPolicy;
 use Modules\Stourify\Policies\SpotPolicy;
 use Modules\Stourify\Policies\WishlistItemPolicy;
+use Modules\Stourify\Support\Sync\SyncRegistry;
 
 /**
  * Wires the Stourify module: routes, migrations, policies, morph aliases.
@@ -92,6 +94,14 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         // Every newly-registered user becomes an explorer of the public org —
         // membership is required to act on any of its content.
         Event::listen(UserRegistered::class, JoinPublicOrganizationAsExplorer::class);
+
+        // Records one tombstone per delete — hard (Follow, WishlistItem) and
+        // soft (Spot, Review, City) alike — so the offline-sync delta can
+        // report a removal. Every table SyncRegistry carries needs one; see
+        // SyncTombstoneObserver.
+        foreach (SyncRegistry::tables() as $table) {
+            SyncRegistry::model($table)::observe(SyncTombstoneObserver::class);
+        }
     }
 
     protected function moduleClass(): string

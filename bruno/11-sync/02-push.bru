@@ -1,0 +1,65 @@
+meta {
+  name: Push (drain)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/api/v1/stourify/sync/push
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  X-Organization-Id: {{org_uuid}}
+}
+
+body:json {
+  {
+    "sto_spots": {
+      "created": [
+        {
+          "uuid": "3f8c1b40-6a2e-4d55-9c1a-000000000001",
+          "title": "Offline-made spot",
+          "description": "Created on the plane; drained on landing.",
+          "latitude": 6.1164,
+          "longitude": 125.1716,
+          "address": "Kalaklan, General Santos City",
+          "categories": ["coast", "nature"],
+          "status": "published"
+        }
+      ],
+      "updated": [],
+      "deleted": []
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.server_time: isDefined
+}
+
+docs {
+  The offline-sync drain. Mirrors the delta shape: a bucket per pushable table
+  (everything except sto_cities, which is reference data).
+
+  Every row carries a CLIENT-generated `uuid`, and that uuid is the identity —
+  the server resolves by it, so replaying this exact request creates nothing new.
+  Send it twice to see the idempotency guarantee: the second run returns
+  op "created", status "ok", and the same record.
+
+  Each operation is independent. A rejected row comes back as
+  { status: "rejected", reason: "validation" | "forbidden" | "error", errors }
+  in `data.results` while its siblings still apply — a bad row never 4xx's the
+  batch. Every write runs the same FormRequest rules and the same policies a
+  single POST /api/v1/spots would, through CrudService; push is not a bypass.
+  `user_id` is always forced to the caller, whatever the row claims.
+
+  The response envelope IS `{ data: … }` here (unlike the delta), because the
+  client reads the push response with `get`, not `getRaw`.
+}

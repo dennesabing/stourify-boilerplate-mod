@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-29
+
+### Added
+
+- **M2a — the backend offline-sync contract**: `GET /api/v1/stourify/sync/delta?since=` (pull) and
+  `POST /api/v1/stourify/sync/push` (drain), the server half of the offline-sync spine the mobile
+  WatermelonDB client syncs against. Implements the frozen contract in
+  `docs/superpowers/specs/2026-07-25-m2a-backend-sync-contract-design.md`; the wire protocol is
+  `packages/offline-sync-core` §5. Both routes sit in the existing
+  `auth:sanctum` + `set_organization_from_header` group and add **no new permission** — the delta
+  returns only the caller's own data, and push authorizes every operation through the policies a
+  single write already goes through.
+  - **`SyncRegistry`** — the one source of truth for the six synced tables (`sto_spots`,
+    `sto_reviews`, `sto_wishlist_items`, `sto_follows`, `sto_explorer_profiles`, `sto_cities`),
+    each with its model, its caller scope, and whether it is pushable. Controller, serializer,
+    observer registration and tests all read it; nothing hardcodes the table list. Posts are
+    deliberately excluded — they are server-composed feed content, browsed, never delta-synced.
+  - **Delta** returns `{ created, updated, deleted }` per table plus an authoritative `server_time`
+    the client stores verbatim as its next cursor. A row appears in exactly one of created/updated.
+    Absent `since` → the full scoped set in `created` (first sync). The body is the payload
+    directly, **not** a `data` envelope. (offline-sync-core reads it with `client.get`, not
+    `getRaw` — `syncEngine.ts:70`. `get` unwraps `data` only when present and otherwise returns
+    the body, so an unwrapped delta deserializes either way.)
+  - **`SyncSerializer`** emits a flat row from an explicit per-table column allowlist — integer `id`
+    and integer FKs preserved (the client keys them as `server_id`), JSON columns as arrays,
+    timestamps ISO8601. Never the API-Resource shape: no `can`, no nested relations, no column
+    outside the allowlist.
+  - **Push** resolves every row by its **client-generated uuid**, then upserts. That is the
+    "create offline → reconnect → no duplicates" guarantee: replaying a push is a no-op. Each row
+    runs the *existing* resource FormRequest rules and writes through `CrudService`, with `user_id`
+    (or `follower_id`) forced to the caller regardless of what the row claims. Operations are
+    independent — a rejected row returns `{ status: "rejected", reason, errors }` in
+    `data.results` while its siblings still apply; nothing 4xx's the batch. Each result carries the
+    server's canonical `record` so the client can reconcile computed fields (slug, status,
+    counters, server id).
+  - **Tombstones** (`sto_sync_tombstones` + `SyncTombstoneObserver`) give deletes a delta
+    representation, uniformly across hard deletes (follows, wishlist items) and soft deletes
+    (spots, reviews, cities) — a delete on one device reaches another device's next pull. A follow
+    records a tombstone for **both** parties; a city's is global (`user_id` null).
+  - Bruno folder `11-sync` covering both endpoints, including the run-it-twice idempotency check.
+  - 17 feature tests: delta scope and cursor, the created/updated split, row shape, tombstones
+    (both-parties follow included), push create + idempotency, per-op validation and authorization
+    rejection, update-by-uuid, delete idempotency, cross-device delete, unauthenticated rejection,
+    and cities being unpushable.
+
+### Notes
+
+- **`delta()` is deliberately not cached.** Every other read endpoint here uses `getCachedList()`
+  because many viewers issue the identical request; a delta is keyed by caller *and* an
+  ever-advancing cursor, so an entry would be used at most once. Same exception the feed documents.
+- **Tier-2 conflict merge is deferred to M2c.** MVP conflict resolution is server-authoritative
+  last-write-wins on scalars through `CrudService`. The user-visible merge for genuinely contended
+  shared records (spec §8 — e.g. one spot's hours edited by two contributors) ships with the Sync
+  Status UI; owned single-user data rarely contends.
+- **Deferred cross-field checks on push.** Push validates with each FormRequest's `rules()` through
+  a manual `Validator`, which does not run their `withValidator()` hooks — the duplicate-review and
+  duplicate-wishlist-save guards. A re-add still fails, but as the table's unique constraint caught
+  per-row and returned as `reason: "error"` rather than `reason: "validation"` with a field message.
+  Correct and isolated, just a coarser error shape than a single request gets; worth lifting into
+  the registry if the mobile client needs to distinguish them. (Self-follow and a missing target are
+  checked explicitly in `pushFollow`, so those do come back as validation.)
+
 ## [0.9.0] - 2026-07-25
 
 ### Added

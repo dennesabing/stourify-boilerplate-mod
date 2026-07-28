@@ -11,6 +11,7 @@ use Modules\Stourify\Http\Controllers\Api\V1\ReportApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SearchApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\SyncController;
 use Modules\Stourify\Http\Controllers\Api\V1\WishlistApiController;
 
 /*
@@ -102,6 +103,16 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
         // Discovery search. Namespaced under /discover so it does not collide
         // with the boilerplate's generic /api/v1/search — see SearchApiController.
         Route::get('/discover/search', [SearchApiController::class, 'index'])->name('discover.search');
+
+        // The offline-sync spine — a mobile WatermelonDB client's delta (pull)
+        // and push (drain). No dedicated permission on the delta: it returns
+        // only the caller's own data, and auth + org membership already gate
+        // that. Push authorizes every operation through the same policies a
+        // single write would, via CrudService — see SyncController.
+        Route::prefix('stourify/sync')->name('stourify.sync.')->group(function (): void {
+            Route::get('/delta', [SyncController::class, 'delta'])->name('delta');
+            Route::post('/push', [SyncController::class, 'push'])->name('push');
+        });
 
         Route::prefix('reports')->name('reports.')->group(function (): void {
             // Filing is open; the queue and resolution are moderator-gated in
