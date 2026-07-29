@@ -12,6 +12,9 @@ use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\SpotStatus;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\Spot;
+use Spatie\MediaLibrary\Conversions\ConversionCollection;
+use Spatie\MediaLibrary\Conversions\FileManipulator;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\Traits\InteractsWithTestSetup;
 
 uses(RefreshDatabase::class, InteractsWithTestSetup::class);
@@ -42,6 +45,23 @@ beforeEach(function (): void {
 function actingAsExplorer(User $user): void
 {
     Sanctum::actingAs($user);
+}
+
+/**
+ * media-library's default conversion pipeline dispatches the conversion job
+ * `->afterCommit()` (config `queue_conversions_after_database_commit`).
+ * `RefreshDatabase` wraps every test in a transaction that is rolled back,
+ * never committed, so that callback never fires and conversions never run —
+ * not a timing issue, a structural one. This runs the library's own
+ * `FileManipulator::performConversions()` directly, synchronously, bypassing
+ * the queue dispatch entirely rather than asserting on an artifact that
+ * would never exist under this trait.
+ */
+function generateSpotConversionsSynchronously(Media $media): void
+{
+    $conversions = ConversionCollection::createForMedia($media)->getConversions($media->collection_name);
+
+    app(FileManipulator::class)->performConversions($conversions, $media);
 }
 
 // ---------------------------------------------------------------------------
@@ -424,6 +444,33 @@ test('a spot with attached photos returns a media array with a uuid and a url pe
         expect($item['uuid'])->not->toBeNull()
             ->and($item['url'])->not->toBeNull();
     }
+});
+
+test('a spot photo carries a thumb_url distinct from the original url', function (): void {
+    Storage::fake('media');
+
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id, 'status' => SpotStatus::Published,
+    ]);
+    $media = $spot->addMedia(UploadedFile::fake()->image('one.jpg', 800, 800))
+        ->toMediaCollection('attachments');
+
+    generateSpotConversionsSynchronously($media);
+
+    // Assert via the library's own API (hasGeneratedConversion) rather than
+    // the HTTP response, so a false pass can't hide behind an unrelated
+    // resource bug.
+    expect($media->hasGeneratedConversion('thumb'))->toBeTrue()
+        ->and($media->hasGeneratedConversion('medium'))->toBeTrue();
+
+    actingAsExplorer($this->explorer);
+
+    $item = $this->getJson("/api/v1/spots/{$spot->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->json('data.media.0');
+
+    expect($item['thumb_url'])->not->toBeNull()
+        ->and($item['thumb_url'])->not->toBe($item['url']);
 });
 
 test('a spot with no media returns an empty array, never null', function (): void {

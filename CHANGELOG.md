@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Media conversions on `Spot` and `Post`** — both now register `thumb` (400x400) and `medium`
+  (1080x1080) conversions, scoped to the `attachments` collection (`HasOrganizationMedia`'s default
+  and the only collection either model's photos land in), matching `User::registerMediaConversions()`'s
+  idiom (`width().height().sharpen(10)`). `SpotResource`/`PostResource` already computed
+  `thumb_url` from `hasGeneratedConversion('thumb')`, but it was always `null` — neither model
+  registered any conversion, so every grid, gallery strip, and feed row downloaded the full-size
+  original. `thumb` feeds grid/gallery/feed rows; `medium` is the spot/post hero view. `medium` is
+  not yet surfaced on either resource — only `thumb_url` and `url` are — a client wanting the hero
+  size still gets the original for now.
+
 - **`GET`/`POST /api/v1/posts/{post}/comments`** — a module-owned, uuid-addressed adapter over the
   boilerplate's generic, polymorphic `Comment` (`HasComments` on `Post`). The mobile client already
   called these two routes (`mobile/src/shared/api/comments.ts`) and got 404s: comments only existed

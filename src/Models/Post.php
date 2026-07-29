@@ -22,6 +22,7 @@ use Modules\Stourify\Database\Factories\PostFactory;
 use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Enums\PostVisibility;
 use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * One explorer's visit to a spot — the unit the Home Feed renders.
@@ -82,6 +83,28 @@ class Post extends Model implements HasMedia
     public static function morphAlias(): string
     {
         return 'stourify_post';
+    }
+
+    /**
+     * `thumb` feeds the feed row and gallery strip; `medium` is the full-post
+     * hero view. Same dimensions as `Spot` — a photo often flows from a post
+     * into its spot's gallery and should not visibly downgrade in transit.
+     * Both are scoped to `attachments` — the only collection a post's photos
+     * ever land in (see HasOrganizationMedia).
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(400)
+            ->height(400)
+            ->sharpen(10)
+            ->performOnCollections('attachments');
+
+        $this->addMediaConversion('medium')
+            ->width(1080)
+            ->height(1080)
+            ->sharpen(10)
+            ->performOnCollections('attachments');
     }
 
     /**

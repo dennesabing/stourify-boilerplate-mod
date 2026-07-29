@@ -13,6 +13,9 @@ use Modules\Stourify\Enums\SpotStatus;
 use Modules\Stourify\Models\Follow;
 use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Spot;
+use Spatie\MediaLibrary\Conversions\ConversionCollection;
+use Spatie\MediaLibrary\Conversions\FileManipulator;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 use Tests\Traits\InteractsWithTestSetup;
 
 uses(RefreshDatabase::class, InteractsWithTestSetup::class);
@@ -43,6 +46,23 @@ beforeEach(function (): void {
 function actingAsPoster(User $user): void
 {
     Sanctum::actingAs($user);
+}
+
+/**
+ * media-library's default conversion pipeline dispatches the conversion job
+ * `->afterCommit()` (config `queue_conversions_after_database_commit`).
+ * `RefreshDatabase` wraps every test in a transaction that is rolled back,
+ * never committed, so that callback never fires and conversions never run —
+ * not a timing issue, a structural one. This runs the library's own
+ * `FileManipulator::performConversions()` directly, synchronously, bypassing
+ * the queue dispatch entirely rather than asserting on an artifact that
+ * would never exist under this trait.
+ */
+function generatePostConversionsSynchronously(Media $media): void
+{
+    $conversions = ConversionCollection::createForMedia($media)->getConversions($media->collection_name);
+
+    app(FileManipulator::class)->performConversions($conversions, $media);
 }
 
 /**
@@ -198,6 +218,33 @@ test('a post with attached photos returns a media array with a uuid and a url pe
     expect($media)->toHaveCount(1)
         ->and($media[0]['uuid'])->not->toBeNull()
         ->and($media[0]['url'])->not->toBeNull();
+});
+
+test('a post photo carries a thumb_url distinct from the original url', function (): void {
+    Storage::fake('media');
+
+    $post = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id, 'published_at' => now(),
+    ]);
+    $media = $post->addMedia(UploadedFile::fake()->image('photo.jpg', 800, 800))
+        ->toMediaCollection('attachments');
+
+    generatePostConversionsSynchronously($media);
+
+    // See the equivalent Spot test helper for why RefreshDatabase makes the
+    // default afterCommit() dispatch non-deterministic and this bypass
+    // is necessary.
+    expect($media->hasGeneratedConversion('thumb'))->toBeTrue()
+        ->and($media->hasGeneratedConversion('medium'))->toBeTrue();
+
+    actingAsPoster($this->author);
+
+    $item = $this->getJson("/api/v1/posts/{$post->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->json('data.media.0');
+
+    expect($item['thumb_url'])->not->toBeNull()
+        ->and($item['thumb_url'])->not->toBe($item['url']);
 });
 
 test('a post with no media returns an empty array, never null', function (): void {

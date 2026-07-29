@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Stourify\Database\Factories\SpotFactory;
 use Modules\Stourify\Enums\SpotStatus;
 use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * A place worth going to, contributed by an explorer.
@@ -88,6 +89,26 @@ class Spot extends Model implements HasMedia
     public static function morphAlias(): string
     {
         return 'stourify_spot';
+    }
+
+    /**
+     * `thumb` feeds the discovery grid and the gallery strip; `medium` is the
+     * spot hero. Both are scoped to `attachments` — the only collection a
+     * spot's photos ever land in (see HasOrganizationMedia).
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(400)
+            ->height(400)
+            ->sharpen(10)
+            ->performOnCollections('attachments');
+
+        $this->addMediaConversion('medium')
+            ->width(1080)
+            ->height(1080)
+            ->sharpen(10)
+            ->performOnCollections('attachments');
     }
 
     /**
