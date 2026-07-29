@@ -10,6 +10,7 @@ use App\Support\InjectedFormField;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\Request;
+use Modules\Stourify\Database\Seeders\StourifyDemoContentSeeder;
 use Modules\Stourify\Database\Seeders\StourifyExplorerBackfillSeeder;
 use Modules\Stourify\Database\Seeders\StourifyPublicOrganizationSeeder;
 use Modules\Stourify\Models\City;
@@ -146,6 +147,9 @@ class StourifyModule implements Module
             // Order matters: the org must exist before users are enrolled into it.
             StourifyPublicOrganizationSeeder::class,
             StourifyExplorerBackfillSeeder::class,
+            // Content must land in the public organization or no explorer can
+            // see it — organization scoping hides it with no error at all.
+            StourifyDemoContentSeeder::class,
         ];
     }
 
