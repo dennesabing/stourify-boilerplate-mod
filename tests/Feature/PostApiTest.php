@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Enums\PostVisibility;
@@ -173,6 +175,41 @@ test('a post is updated and deleted by its author', function (): void {
 
     $this->deleteJson("/api/v1/posts/{$post->uuid}", [], orgHeader($this->organization))->assertOk();
     $this->assertSoftDeleted('sto_posts', ['id' => $post->id]);
+});
+
+// ---------------------------------------------------------------------------
+// Media — the feed's photo source
+// ---------------------------------------------------------------------------
+
+test('a post with attached photos returns a media array with a uuid and a url per photo', function (): void {
+    Storage::fake('media');
+
+    $post = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id, 'published_at' => now(),
+    ]);
+    $post->addMedia(UploadedFile::fake()->image('photo.jpg', 200, 200))->toMediaCollection('attachments');
+
+    actingAsPoster($this->author);
+
+    $media = $this->getJson("/api/v1/posts/{$post->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->json('data.media');
+
+    expect($media)->toHaveCount(1)
+        ->and($media[0]['uuid'])->not->toBeNull()
+        ->and($media[0]['url'])->not->toBeNull();
+});
+
+test('a post with no media returns an empty array, never null', function (): void {
+    $post = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id, 'published_at' => now(),
+    ]);
+
+    actingAsPoster($this->author);
+
+    $this->getJson("/api/v1/posts/{$post->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.media', []);
 });
 
 // ---------------------------------------------------------------------------

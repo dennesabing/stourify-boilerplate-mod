@@ -56,10 +56,11 @@ class FeedApiController extends Controller
         $query = Post::query()
             ->visibleTo($user)
             ->whereNotNull('published_at')
-            // `user.media` is eager-loaded here, not resolved inside the
-            // resource, so rendering PostResource::author for a page of posts
-            // costs one query total rather than one per row.
-            ->with(['spot', 'user.media']);
+            // `user.media` and `media` are eager-loaded here, not resolved
+            // inside the resource, so rendering PostResource::author and
+            // PostResource::media for a page of posts costs one query each
+            // total rather than one per row.
+            ->with(['spot', 'user.media', 'media']);
 
         $posts = $this->withViewerReaction($query, $user)
             ->orderByDesc('published_at')

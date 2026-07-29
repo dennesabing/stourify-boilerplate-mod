@@ -64,6 +64,17 @@ class PostResource extends BaseResource
                 'avatar_url' => $post->user->getFirstMediaUrl('avatar', 'medium') ?: null,
             ]),
 
+            // The feed's photo source. Always an array, never null — see
+            // SpotResource::media, whose pattern this mirrors. `media` must be
+            // eager-loaded by the caller (PostApiController, FeedApiController)
+            // so this costs one query per page, not one per post.
+            'media' => $this->whenLoaded('media', fn (): array => $post->getMedia('attachments')
+                ->map(fn ($media): array => [
+                    'uuid' => $media->uuid,
+                    'url' => $media->getUrl(),
+                    'thumb_url' => $media->hasGeneratedConversion('thumb') ? $media->getUrl('thumb') : null,
+                ])->all(), []),
+
             'created_at' => $post->created_at?->toIso8601String(),
             'updated_at' => $post->updated_at?->toIso8601String(),
 

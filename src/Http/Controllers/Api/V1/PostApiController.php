@@ -57,10 +57,11 @@ class PostApiController extends Controller
 
         $posts = Post::getCachedList($cacheKey, fn (): LengthAwarePaginator => $this
             ->withViewerReaction($this->visibleTo(Post::query(), $user), $user)
-            // `user.media` is eager-loaded here, not resolved inside the
-            // resource, so rendering PostResource::author for a page of posts
-            // costs one query total rather than one per row.
-            ->with(['spot', 'user.media'])
+            // `user.media` and `media` are eager-loaded here, not resolved
+            // inside the resource, so rendering PostResource::author and
+            // PostResource::media for a page of posts costs one query each
+            // total rather than one per row.
+            ->with(['spot', 'user.media', 'media'])
             ->when(! empty($filters['spot_uuid']), fn (Builder $q) => $q->whereHas(
                 'spot', fn (Builder $spot) => $spot->where('uuid', $filters['spot_uuid'])
             ))
@@ -82,6 +83,7 @@ class PostApiController extends Controller
         $post->load([
             'spot',
             'user.media',
+            'media',
             'reactions' => fn ($q) => $q->where('user_id', $request->user()->id),
         ]);
 

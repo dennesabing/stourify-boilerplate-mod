@@ -72,13 +72,13 @@ class SpotApiController extends Controller
                 return Spot::search($filters['q'])
                     ->query(fn (Builder $query) => $this->applyFilters(
                         $this->visibleTo($query, $user), $filters
-                    )->with(['city', 'user']))
+                    )->with(['city', 'user', 'media']))
                     ->paginate($perPage);
             }
 
             $query = $this->applyFilters(
                 $this->visibleTo(Spot::query(), $user), $filters
-            )->with(['city', 'user']);
+            )->with(['city', 'user', 'media']);
 
             return $query
                 ->orderBy($filters['sort'] ?? 'created_at', $filters['direction'] ?? 'desc')
@@ -113,7 +113,7 @@ class SpotApiController extends Controller
         $spots = Spot::getCachedList($cacheKey, fn (): LengthAwarePaginator => Spot::query()
             ->published()
             ->nearby($latitude, $longitude, $radiusKm)
-            ->with(['city', 'user'])
+            ->with(['city', 'user', 'media'])
             ->paginate($perPage));
 
         $this->attachDistances($spots, $latitude, $longitude);
@@ -126,7 +126,7 @@ class SpotApiController extends Controller
         $this->authorize('view', $spot);
 
         return $this->success(
-            new SpotResource($spot->load(['city', 'user'])),
+            new SpotResource($spot->load(['city', 'user', 'media'])),
         );
     }
 

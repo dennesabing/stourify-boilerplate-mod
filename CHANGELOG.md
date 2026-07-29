@@ -34,8 +34,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New: `Http/Controllers/Api/V1/PostCommentApiController.php`,
     `Http/Requests/PostCommentStoreRequest.php`, `tests/Feature/PostCommentApiTest.php`.
 
+### Added
+
+- **`media` on `SpotResource` and `PostResource`** — the photo gallery M3c needs, and the reason the
+  Home Feed rendered no images despite posts having photos: neither resource exposed the media both
+  models have carried since M1's presigned upload flow (`HasOrganizationMedia`). Each entry is
+  `{uuid, url, thumb_url}`, following `App\Http\Resources\MediaResource`'s existing shape —
+  `thumb_url` is `null` unless a `thumb` conversion has actually been generated (Spot and Post
+  register no media conversions today, so `thumb_url` is always `null` for now; `url` is the only
+  field mobile can rely on until a conversion is added). Always an array, never `null`, even with no
+  photos. `media` is eager-loaded by every caller (`SpotApiController@index/@show/@nearby`,
+  `PostApiController@index/@show`, `FeedApiController@index`) so a page costs one query total, not
+  one per row — the same pattern `1321dcc` established for `PostResource::author`.
+
 ### Fixed
 
+- **`ReviewResource` exposes reviewer identity** — a nested `author` object (`{uuid, name, username,
+  avatar_url}`), `whenLoaded('user')`, sourced via `AttachesExplorerProfiles` exactly as
+  `PostResource::author` is. Closes the identical N+1-across-the-network gap `PostResource` had
+  before this milestone: a reviews list needed one `GET /api/v1/profiles/{user}` per row to show who
+  wrote each review. `author_uuid` is kept for backward compatibility.
+  `ReviewApiController@index/@show` now eager-load `user.media` and attach explorer profiles for the
+  whole page in one query, not per row.
 - **`PostResource` exposes author identity** — a nested `author` object (`{uuid, name, username,
   avatar_url}`), `whenLoaded('user')`, sourced from the user's `ExplorerProfile` (via
   `AttachesExplorerProfiles`, the existing follow-graph pattern) and avatar media. Closes an

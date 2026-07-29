@@ -201,6 +201,22 @@ test('a feed post reports a null username when the author has no ExplorerProfile
         ->and($post['author']['uuid'])->toBe($this->author->uuid);
 });
 
+test('a feed post carries its photos, and a photo-less post carries an empty array, never null', function (): void {
+    Storage::fake('media');
+
+    $withPhoto = publishedPost($this->organization, $this->author, $this->spot, '2026-07-09 09:00:00');
+    $withPhoto->addMedia(UploadedFile::fake()->image('photo.jpg', 200, 200))->toMediaCollection('attachments');
+    $withoutPhoto = publishedPost($this->organization, $this->author, $this->spot, '2026-07-08 09:00:00');
+
+    actingAsFeedUser($this->viewer);
+    $posts = collect($this->getJson('/api/v1/feed', orgHeader($this->organization))->assertOk()->json('data'))
+        ->keyBy('uuid');
+
+    expect($posts[$withPhoto->uuid]['media'])->toHaveCount(1)
+        ->and($posts[$withPhoto->uuid]['media'][0]['url'])->not->toBeNull()
+        ->and($posts[$withoutPhoto->uuid]['media'])->toBe([]);
+});
+
 test('the feed page query count does not grow with the number of posts, only with the number of distinct authors (no N+1)', function (): void {
     Storage::fake('media');
 

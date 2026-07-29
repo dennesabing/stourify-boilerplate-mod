@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\SpotStatus;
 use Modules\Stourify\Models\City;
@@ -394,6 +398,97 @@ test('the list paginates', function (): void {
         ->assertJsonCount(3, 'data')
         ->assertJsonPath('meta.total', 7)
         ->assertJsonPath('meta.per_page', 3);
+});
+
+// ---------------------------------------------------------------------------
+// Media — the photo gallery's data source
+// ---------------------------------------------------------------------------
+
+test('a spot with attached photos returns a media array with a uuid and a url per photo', function (): void {
+    Storage::fake('media');
+
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id, 'status' => SpotStatus::Published,
+    ]);
+    $spot->addMedia(UploadedFile::fake()->image('one.jpg', 200, 200))->toMediaCollection('attachments');
+    $spot->addMedia(UploadedFile::fake()->image('two.jpg', 200, 200))->toMediaCollection('attachments');
+
+    actingAsExplorer($this->explorer);
+
+    $media = $this->getJson("/api/v1/spots/{$spot->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->json('data.media');
+
+    expect($media)->toHaveCount(2);
+    foreach ($media as $item) {
+        expect($item['uuid'])->not->toBeNull()
+            ->and($item['url'])->not->toBeNull();
+    }
+});
+
+test('a spot with no media returns an empty array, never null', function (): void {
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id, 'status' => SpotStatus::Published,
+    ]);
+
+    actingAsExplorer($this->explorer);
+
+    $this->getJson("/api/v1/spots/{$spot->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.media', []);
+});
+
+test('the spot list page query count does not grow with the number of spots, only with the number of spots carrying media (no N+1)', function (): void {
+    Storage::fake('media');
+
+    // Five spots, each with one photo — the media-row count this measurement
+    // holds fixed across both rounds. Growing it would also grow the
+    // pre-existing, out-of-scope SpacesPathGenerator N+1 (one lazy
+    // `$media->model` load per distinct media row), contaminating the
+    // measurement of *this* module's invariant: that `media` is eager-loaded
+    // once per page, not once per spot.
+    collect(range(1, 5))->each(function (int $i): void {
+        $spot = Spot::factory()->for($this->organization)->create([
+            'user_id' => $this->explorer->id, 'status' => SpotStatus::Published,
+        ]);
+        $spot->addMedia(UploadedFile::fake()->image("photo{$i}.jpg", 200, 200))->toMediaCollection('attachments');
+    });
+
+    actingAsExplorer($this->explorer);
+
+    DB::enableQueryLog();
+    $this->getJson('/api/v1/spots?per_page=25', orgHeader($this->organization))
+        ->assertOk()->assertJsonCount(5, 'data');
+    $queriesFiveSpots = count(DB::getQueryLog());
+    DB::flushQueryLog();
+    DB::disableQueryLog();
+
+    // The array cache store used in tests does not support tag-based
+    // invalidation (see Cacheable::clearCache — falls back to a single-key
+    // forget when the store lacks `tags()`), so the round-1 response for this
+    // exact query string would otherwise still be cached here. Flushing
+    // isolates the query count this test measures from that test-only
+    // caching artifact, not from anything the fix changes in production
+    // (Redis, the real store, supports tags and busts the list on every
+    // spot save via `Cacheable::bootCacheable()`).
+    Cache::flush();
+
+    // Fifteen more spots, none with media — same five media-bearing spots,
+    // same five media rows. Only the *host* (spot) count on the page grows.
+    Spot::factory()->for($this->organization)->count(15)->create([
+        'user_id' => $this->explorer->id, 'status' => SpotStatus::Published,
+    ]);
+
+    DB::enableQueryLog();
+    $this->getJson('/api/v1/spots?per_page=25', orgHeader($this->organization))
+        ->assertOk()->assertJsonCount(20, 'data');
+    $queriesTwentySpots = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($queriesTwentySpots)->toBeLessThanOrEqual($queriesFiveSpots + 2,
+        "Expected no N+1: {$queriesFiveSpots} queries for 5 spots (5 with media), ".
+        "{$queriesTwentySpots} for 20 spots (still only 5 with media)."
+    );
 });
 
 test('two spots sharing a title get distinct slugs', function (): void {

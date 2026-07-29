@@ -20,6 +20,7 @@ use Modules\Stourify\Http\Resources\ReviewResource;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Observers\ReviewObserver;
+use Modules\Stourify\Support\AttachesExplorerProfiles;
 use Modules\Stourify\Support\LoadsViewerReactions;
 
 /**
@@ -37,7 +38,7 @@ use Modules\Stourify\Support\LoadsViewerReactions;
  */
 class ReviewApiController extends Controller
 {
-    use ApiResponses, LoadsViewerReactions;
+    use ApiResponses, AttachesExplorerProfiles, LoadsViewerReactions;
 
     public function index(ReviewIndexRequest $request): AnonymousResourceCollection
     {
@@ -56,7 +57,11 @@ class ReviewApiController extends Controller
 
         $reviews = Review::getCachedList($cacheKey, fn (): LengthAwarePaginator => $this
             ->withViewerReaction(Review::query(), $request->user())
-            ->with(['spot', 'user'])
+            // `user.media` is eager-loaded here, not resolved inside the
+            // resource, so rendering ReviewResource::author for a page of
+            // reviews costs one query total rather than one per row — the
+            // same fix PostApiController::index applies for posts.
+            ->with(['spot', 'user.media'])
             ->when(! empty($filters['spot_uuid']), fn (Builder $q) => $q->whereHas(
                 'spot', fn (Builder $spot) => $spot->where('uuid', $filters['spot_uuid'])
             ))
@@ -65,6 +70,10 @@ class ReviewApiController extends Controller
             ->orderBy($filters['sort'] ?? 'created_at', $filters['direction'] ?? 'desc')
             ->paginate($perPage));
 
+        $this->attachExplorerProfiles(
+            $reviews->getCollection()->pluck('user')->filter()->unique('id')->values()
+        );
+
         return ReviewResource::collection($reviews);
     }
 
@@ -72,7 +81,13 @@ class ReviewApiController extends Controller
     {
         $this->authorize('view', $review);
 
-        $review->load(['spot', 'user', 'reactions' => fn ($q) => $q->where('user_id', $request->user()->id)]);
+        $review->load([
+            'spot',
+            'user.media',
+            'reactions' => fn ($q) => $q->where('user_id', $request->user()->id),
+        ]);
+
+        $this->attachExplorerProfiles(collect([$review->user])->filter()->values());
 
         return $this->success(new ReviewResource($review));
     }

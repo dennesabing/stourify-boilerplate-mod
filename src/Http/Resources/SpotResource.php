@@ -66,6 +66,18 @@ class SpotResource extends BaseResource
             'city' => new CityResource($this->whenLoaded('city')),
             'contributor_uuid' => $this->whenLoaded('user', fn () => $spot->user->uuid),
 
+            // The photo gallery's data source. Always an array, never null —
+            // an unattached spot still owes the client "no photos", not the
+            // absence of the key. `media` must be eager-loaded by the caller
+            // (see SpotApiController) so this costs one query for the whole
+            // page, not one per row.
+            'media' => $this->whenLoaded('media', fn (): array => $spot->getMedia('attachments')
+                ->map(fn ($media): array => [
+                    'uuid' => $media->uuid,
+                    'url' => $media->getUrl(),
+                    'thumb_url' => $media->hasGeneratedConversion('thumb') ? $media->getUrl('thumb') : null,
+                ])->all(), []),
+
             'created_at' => $spot->created_at?->toIso8601String(),
             'updated_at' => $spot->updated_at?->toIso8601String(),
 

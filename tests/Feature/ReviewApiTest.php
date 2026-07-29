@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\SpotStatus;
+use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Tests\Traits\InteractsWithTestSetup;
@@ -104,6 +109,106 @@ test('the list filters by spot and by author', function (): void {
     $mineOnly = $this->getJson('/api/v1/reviews?mine=1', orgHeader($this->organization))
         ->assertOk()->json('data');
     expect($mineOnly)->toHaveCount(1)->and($mineOnly[0]['uuid'])->toBe($mine->uuid);
+});
+
+// ---------------------------------------------------------------------------
+// Reviewer identity — a reviews list must not need one profile fetch per row
+// ---------------------------------------------------------------------------
+
+test('a review carries its author\'s identity for the list row', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->reviewer->id,
+        'username' => 'wanderer',
+    ]);
+    Review::factory()->for($this->organization)->create([
+        'user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id,
+    ]);
+
+    actingAsReviewer($this->reviewer);
+    $review = $this->getJson('/api/v1/reviews', orgHeader($this->organization))->assertOk()->json('data.0');
+
+    expect($review['author'])->not->toBeNull()
+        ->and($review['author']['uuid'])->toBe($this->reviewer->uuid)
+        ->and($review['author']['name'])->toBe($this->reviewer->name)
+        ->and($review['author']['username'])->toBe('wanderer')
+        // Backward compatibility: mobile already consumes author_uuid directly.
+        ->and($review['author_uuid'])->toBe($this->reviewer->uuid);
+});
+
+test('a review reports a null username when the reviewer has no ExplorerProfile yet', function (): void {
+    Review::factory()->for($this->organization)->create([
+        'user_id' => $this->reviewer->id, 'spot_id' => $this->spot->id,
+    ]);
+
+    actingAsReviewer($this->reviewer);
+    $review = $this->getJson('/api/v1/reviews', orgHeader($this->organization))->assertOk()->json('data.0');
+
+    expect($review['author']['username'])->toBeNull()
+        ->and($review['author']['uuid'])->toBe($this->reviewer->uuid);
+});
+
+test('the review list page query count does not grow with the number of reviews, only with the number of distinct authors (no N+1)', function (): void {
+    Storage::fake('media');
+
+    // Five distinct authors, each with an ExplorerProfile and avatar — the
+    // identity data ReviewResource::author renders. This set is fixed across
+    // both measurements below; only the review count changes.
+    $authors = collect(range(1, 5))->map(function (int $i): User {
+        $author = $this->createUserWithPermissions($this->organization, REVIEWER_PERMISSIONS);
+        ExplorerProfile::factory()->for($this->organization)->create([
+            'user_id' => $author->id, 'username' => "explorer{$i}",
+        ]);
+        $author->addMedia(UploadedFile::fake()->image("avatar{$i}.jpg", 100, 100))->toMediaCollection('avatar');
+
+        return $author;
+    });
+
+    $sharedSpot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $authors->first()->id, 'status' => SpotStatus::Published,
+    ]);
+
+    // Round 1: one review per author (5 reviews, 5 authors).
+    $authors->each(fn (User $author) => Review::factory()->for($this->organization)->create([
+        'user_id' => $author->id, 'spot_id' => $sharedSpot->id,
+    ]));
+
+    actingAsReviewer($this->reviewer);
+
+    DB::enableQueryLog();
+    $this->getJson('/api/v1/reviews?per_page=25', orgHeader($this->organization))
+        ->assertOk()->assertJsonCount(5, 'data');
+    $queriesFiveReviews = count(DB::getQueryLog());
+    DB::flushQueryLog();
+    DB::disableQueryLog();
+
+    // The array cache store used in tests has no tag support, so the
+    // round-1 response for this exact query string would otherwise still be
+    // cached — see the identical note in SpotApiTest's N+1 test.
+    Cache::flush();
+
+    // Round 2: three more reviews per author, each on a fresh spot (an
+    // explorer may only review a given spot once — the sto_reviews
+    // (spot_id, user_id) unique index), 20 reviews total, same 5 authors.
+    $authors->each(function (User $author): void {
+        foreach (range(1, 3) as $j) {
+            $spot = Spot::factory()->for($this->organization)->create([
+                'user_id' => $author->id, 'status' => SpotStatus::Published,
+            ]);
+            Review::factory()->for($this->organization)->create([
+                'user_id' => $author->id, 'spot_id' => $spot->id,
+            ]);
+        }
+    });
+
+    DB::enableQueryLog();
+    $this->getJson('/api/v1/reviews?per_page=25', orgHeader($this->organization))
+        ->assertOk()->assertJsonCount(20, 'data');
+    $queriesTwentyReviews = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    expect($queriesTwentyReviews)->toBeLessThanOrEqual($queriesFiveReviews + 2,
+        "Expected no N+1: {$queriesFiveReviews} queries for 5 reviews, {$queriesTwentyReviews} for 20 reviews — same 5 authors."
+    );
 });
 
 // ---------------------------------------------------------------------------

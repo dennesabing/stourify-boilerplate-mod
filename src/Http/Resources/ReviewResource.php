@@ -35,7 +35,21 @@ class ReviewResource extends BaseResource
             ),
 
             'spot_uuid' => $this->whenLoaded('spot', fn () => $review->spot->uuid),
+
+            // author_uuid is kept for backward compatibility. `author` is the
+            // full identity a reviews list row renders (name, handle, avatar)
+            // in one payload — the same fix PostResource::author applies, for
+            // the identical reason: without it, a reviews list costs one
+            // profile fetch per row.
             'author_uuid' => $this->whenLoaded('user', fn () => $review->user->uuid),
+            'author' => $this->whenLoaded('user', fn (): array => [
+                'uuid' => $review->user->uuid,
+                'name' => $review->user->name,
+                'username' => $review->user->relationLoaded('stourifyProfile')
+                    ? $review->user->stourifyProfile?->username
+                    : null,
+                'avatar_url' => $review->user->getFirstMediaUrl('avatar', 'medium') ?: null,
+            ]),
 
             'created_at' => $review->created_at?->toIso8601String(),
             'updated_at' => $review->updated_at?->toIso8601String(),
