@@ -9,6 +9,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Modules\Stourify\Http\Requests\FeedIndexRequest;
 use Modules\Stourify\Http\Resources\PostResource;
 use Modules\Stourify\Models\Post;
+use Modules\Stourify\Support\AttachesExplorerProfiles;
 use Modules\Stourify\Support\LoadsViewerReactions;
 
 /**
@@ -40,7 +41,7 @@ use Modules\Stourify\Support\LoadsViewerReactions;
  */
 class FeedApiController extends Controller
 {
-    use LoadsViewerReactions;
+    use AttachesExplorerProfiles, LoadsViewerReactions;
 
     /**
      * A cursor page of the viewer's home feed.
@@ -55,13 +56,20 @@ class FeedApiController extends Controller
         $query = Post::query()
             ->visibleTo($user)
             ->whereNotNull('published_at')
-            ->with(['spot', 'user']);
+            // `user.media` is eager-loaded here, not resolved inside the
+            // resource, so rendering PostResource::author for a page of posts
+            // costs one query total rather than one per row.
+            ->with(['spot', 'user.media']);
 
         $posts = $this->withViewerReaction($query, $user)
             ->orderByDesc('published_at')
             ->orderByDesc('id')
             ->cursorPaginate($limit)
             ->withQueryString();
+
+        $this->attachExplorerProfiles(
+            $posts->getCollection()->pluck('user')->filter()->unique('id')->values()
+        );
 
         return PostResource::collection($posts);
     }

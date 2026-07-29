@@ -84,6 +84,49 @@ test('a post can be created already published', function (): void {
         ->assertJsonPath('data.is_published', true);
 });
 
+// ---------------------------------------------------------------------------
+// `is_liked` — must be present (not merely absent) on every write response
+// ---------------------------------------------------------------------------
+
+test('is_liked is present, not absent, on the create response', function (): void {
+    actingAsPoster($this->author);
+
+    $response = $this->postJson('/api/v1/posts', [
+        'spot_uuid' => $this->spot->uuid,
+        'publish' => true,
+    ], orgHeader($this->organization))->assertCreated();
+
+    expect($response->json('data'))->toHaveKey('is_liked')
+        ->and($response->json('data.is_liked'))->toBeFalse();
+});
+
+test('is_liked is present, not absent, on the update response', function (): void {
+    actingAsPoster($this->author);
+    $post = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id, 'published_at' => now(),
+    ]);
+
+    $response = $this->patchJson("/api/v1/posts/{$post->uuid}", [
+        'caption' => 'Edited caption',
+    ], orgHeader($this->organization))->assertOk();
+
+    expect($response->json('data'))->toHaveKey('is_liked')
+        ->and($response->json('data.is_liked'))->toBeFalse();
+});
+
+test('is_liked is present, not absent, on the publish response', function (): void {
+    actingAsPoster($this->author);
+    $post = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id, 'published_at' => null,
+    ]);
+
+    $response = $this->postJson("/api/v1/posts/{$post->uuid}/publish", [], orgHeader($this->organization))
+        ->assertOk();
+
+    expect($response->json('data'))->toHaveKey('is_liked')
+        ->and($response->json('data.is_liked'))->toBeFalse();
+});
+
 test('the client cannot dictate published_at', function (): void {
     actingAsPoster($this->author);
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`PostResource` exposes author identity** — a nested `author` object (`{uuid, name, username,
+  avatar_url}`), `whenLoaded('user')`, sourced from the user's `ExplorerProfile` (via
+  `AttachesExplorerProfiles`, the existing follow-graph pattern) and avatar media. Closes an
+  N+1-across-the-network gap where rendering a feed row's header required a
+  `GET /api/v1/profiles/{user}` per post — the app's most-scrolled screen. `author_uuid` is kept
+  for backward compatibility. `FeedApiController@index` and `PostApiController@index/@show` now
+  eager-load `user.media` and attach explorer profiles for the whole page in one query, not per
+  row. See `docs/superpowers/specs/2026-07-29-m3-feed-and-spot-hub-design.md` §3.1.
+- **`is_liked` is now present (not absent) on write responses** — `store`, `update` and `publish`
+  reload the post through the same `withViewerReaction()` mechanism the feed and index use, so an
+  optimistic client UI has a value to reconcile against immediately after a write rather than only
+  on the next read. See design spec §3.2.
+
 ## [0.10.0] - 2026-07-29
 
 ### Added

@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Enums\PostVisibility;
 use Modules\Stourify\Enums\SpotStatus;
+use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Follow;
 use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Spot;
@@ -163,6 +167,99 @@ test('a moderator gets their own feed, not every private post in the system', fu
 
     expect($uuids)->toContain($public->uuid)
         ->and($uuids)->not->toContain($strangersPrivate->uuid);
+});
+
+// ---------------------------------------------------------------------------
+// Author identity — a feed row's header must not need a per-post round trip
+// ---------------------------------------------------------------------------
+
+test('a feed post carries its author\'s identity for the row header', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id,
+        'username' => 'wanderer',
+    ]);
+    publishedPost($this->organization, $this->author, $this->spot, '2026-07-09 09:00:00');
+
+    actingAsFeedUser($this->viewer);
+    $post = $this->getJson('/api/v1/feed', orgHeader($this->organization))->assertOk()->json('data.0');
+
+    expect($post['author'])->not->toBeNull()
+        ->and($post['author']['uuid'])->toBe($this->author->uuid)
+        ->and($post['author']['name'])->toBe($this->author->name)
+        ->and($post['author']['username'])->toBe('wanderer')
+        // Backward compatibility: mobile already consumes author_uuid directly.
+        ->and($post['author_uuid'])->toBe($this->author->uuid);
+});
+
+test('a feed post reports a null username when the author has no ExplorerProfile yet', function (): void {
+    publishedPost($this->organization, $this->author, $this->spot, '2026-07-09 09:00:00');
+
+    actingAsFeedUser($this->viewer);
+    $post = $this->getJson('/api/v1/feed', orgHeader($this->organization))->assertOk()->json('data.0');
+
+    expect($post['author']['username'])->toBeNull()
+        ->and($post['author']['uuid'])->toBe($this->author->uuid);
+});
+
+test('the feed page query count does not grow with the number of posts, only with the number of distinct authors (no N+1)', function (): void {
+    Storage::fake('media');
+
+    // Five distinct authors, each with their own ExplorerProfile and avatar —
+    // the identity data `PostResource::author` renders. The author *set* is
+    // fixed across both measurements below; only the post count changes. That
+    // isolates the invariant Gap 1 protects — cost must scale with distinct
+    // authors on the page, never with post count — from unrelated per-author
+    // overhead (e.g. media URL resolution) that would otherwise contaminate a
+    // baseline built from a different, smaller author set.
+    $authors = collect(range(1, 5))->map(function (int $i): User {
+        $author = $this->createUserWithPermissions($this->organization, FEED_PERMISSIONS);
+        ExplorerProfile::factory()->for($this->organization)->create([
+            'user_id' => $author->id, 'username' => "explorer{$i}",
+        ]);
+        $author->addMedia(UploadedFile::fake()->image("avatar{$i}.jpg", 100, 100))->toMediaCollection('avatar');
+
+        return $author;
+    });
+
+    $sharedSpot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $authors->first()->id, 'status' => SpotStatus::Published,
+    ]);
+
+    // Round 1: one post per author (5 posts, 5 authors).
+    $authors->each(fn (User $author, int $idx) => publishedPost(
+        $this->organization, $author, $sharedSpot, sprintf('2026-06-%02d 09:00:00', $idx + 1),
+    ));
+
+    actingAsFeedUser($this->viewer);
+
+    DB::enableQueryLog();
+    $this->getJson('/api/v1/feed?limit=25', orgHeader($this->organization))
+        ->assertOk()->assertJsonCount(5, 'data');
+    $queriesFivePosts = count(DB::getQueryLog());
+    DB::flushQueryLog();
+    DB::disableQueryLog();
+
+    // Round 2: three more posts per author (20 posts total), same 5 authors.
+    $authors->each(function (User $author, int $idx) use ($sharedSpot): void {
+        foreach (range(1, 3) as $j) {
+            publishedPost(
+                $this->organization, $author, $sharedSpot,
+                sprintf('2026-07-%02d %02d:00:00', $idx + 1, $j),
+            );
+        }
+    });
+
+    DB::enableQueryLog();
+    $this->getJson('/api/v1/feed?limit=25', orgHeader($this->organization))
+        ->assertOk()->assertJsonCount(20, 'data');
+    $queriesTwentyPosts = count(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    // Same 5 authors, 4x the posts: query count must stay flat, not scale
+    // with the row count — that is the N+1 Gap 1 exists to close.
+    expect($queriesTwentyPosts)->toBeLessThanOrEqual($queriesFivePosts + 2,
+        "Expected no N+1: {$queriesFivePosts} queries for 5 posts, {$queriesTwentyPosts} for 20 posts — same 5 authors."
+    );
 });
 
 // ---------------------------------------------------------------------------

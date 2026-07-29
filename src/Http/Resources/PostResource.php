@@ -49,7 +49,20 @@ class PostResource extends BaseResource
             ),
 
             'spot' => new SpotResource($this->whenLoaded('spot')),
+
+            // author_uuid is kept for backward compatibility — mobile already
+            // consumes it. `author` is the full identity a feed row's header
+            // renders (name, handle, avatar) in one payload, so a client never
+            // has to round-trip to GET /profiles/{user} per post.
             'author_uuid' => $this->whenLoaded('user', fn () => $post->user->uuid),
+            'author' => $this->whenLoaded('user', fn (): array => [
+                'uuid' => $post->user->uuid,
+                'name' => $post->user->name,
+                'username' => $post->user->relationLoaded('stourifyProfile')
+                    ? $post->user->stourifyProfile?->username
+                    : null,
+                'avatar_url' => $post->user->getFirstMediaUrl('avatar', 'medium') ?: null,
+            ]),
 
             'created_at' => $post->created_at?->toIso8601String(),
             'updated_at' => $post->updated_at?->toIso8601String(),

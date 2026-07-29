@@ -22,6 +22,7 @@ use Modules\Stourify\Http\Resources\PostResource;
 use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Policies\PostPolicy;
+use Modules\Stourify\Support\AttachesExplorerProfiles;
 use Modules\Stourify\Support\LoadsViewerReactions;
 
 /**
@@ -37,7 +38,7 @@ use Modules\Stourify\Support\LoadsViewerReactions;
  */
 class PostApiController extends Controller
 {
-    use ApiResponses, LoadsViewerReactions;
+    use ApiResponses, AttachesExplorerProfiles, LoadsViewerReactions;
 
     public function index(PostIndexRequest $request): AnonymousResourceCollection
     {
@@ -56,13 +57,20 @@ class PostApiController extends Controller
 
         $posts = Post::getCachedList($cacheKey, fn (): LengthAwarePaginator => $this
             ->withViewerReaction($this->visibleTo(Post::query(), $user), $user)
-            ->with(['spot', 'user'])
+            // `user.media` is eager-loaded here, not resolved inside the
+            // resource, so rendering PostResource::author for a page of posts
+            // costs one query total rather than one per row.
+            ->with(['spot', 'user.media'])
             ->when(! empty($filters['spot_uuid']), fn (Builder $q) => $q->whereHas(
                 'spot', fn (Builder $spot) => $spot->where('uuid', $filters['spot_uuid'])
             ))
             ->when(! empty($filters['mine']), fn (Builder $q) => $q->where('user_id', $user->id))
             ->orderBy($filters['sort'] ?? 'published_at', $filters['direction'] ?? 'desc')
             ->paginate($perPage));
+
+        $this->attachExplorerProfiles(
+            $posts->getCollection()->pluck('user')->filter()->unique('id')->values()
+        );
 
         return PostResource::collection($posts);
     }
@@ -71,7 +79,13 @@ class PostApiController extends Controller
     {
         $this->authorize('view', $post);
 
-        $post->load(['spot', 'user', 'reactions' => fn ($q) => $q->where('user_id', $request->user()->id)]);
+        $post->load([
+            'spot',
+            'user.media',
+            'reactions' => fn ($q) => $q->where('user_id', $request->user()->id),
+        ]);
+
+        $this->attachExplorerProfiles(collect([$post->user])->filter()->values());
 
         return $this->success(new PostResource($post));
     }
@@ -90,7 +104,7 @@ class PostApiController extends Controller
         ]);
 
         return $this->success(
-            new PostResource($post->load(['spot', 'user'])),
+            new PostResource($this->freshForResponse($post, $request->user())),
             201,
             'Post created successfully.',
         );
@@ -108,7 +122,7 @@ class PostApiController extends Controller
         $post = CrudService::for(Post::class)->update($post, $data);
 
         return $this->success(
-            new PostResource($post->load(['spot', 'user'])),
+            new PostResource($this->freshForResponse($post, $request->user())),
             200,
             'Post updated successfully.',
         );
@@ -121,7 +135,7 @@ class PostApiController extends Controller
      * than an error, and does not move it up the feed. An offline client
      * retrying a queued write must be able to send this twice safely.
      */
-    public function publish(Post $post): JsonResponse
+    public function publish(Request $request, Post $post): JsonResponse
     {
         $this->authorize('publish', $post);
 
@@ -130,7 +144,7 @@ class PostApiController extends Controller
         }
 
         return $this->success(
-            new PostResource($post->load(['spot', 'user'])),
+            new PostResource($this->freshForResponse($post, $request->user())),
             200,
             'Post published successfully.',
         );
@@ -141,6 +155,23 @@ class PostApiController extends Controller
         CrudService::for(Post::class)->delete($post);
 
         return $this->success(null, 200, 'Post deleted successfully.');
+    }
+
+    /**
+     * Reload a just-written post the way the read paths do: spot, author
+     * (with the media needed for `author.avatar_url`), and the viewer's own
+     * reaction via the same `withViewerReaction()` mechanism the feed uses —
+     * so `is_liked` is present, not absent, on write responses too.
+     */
+    private function freshForResponse(Post $post, User $viewer): Post
+    {
+        $post = $this->withViewerReaction(Post::query()->with(['spot', 'user.media']), $viewer)
+            ->whereKey($post->getKey())
+            ->firstOrFail();
+
+        $this->attachExplorerProfiles(collect([$post->user])->filter()->values());
+
+        return $post;
     }
 
     /**
