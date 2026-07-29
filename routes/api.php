@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\Stourify\Http\Controllers\Api\V1\FeedApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\FollowApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\PostApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\PostCommentApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ProfileApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReportApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
@@ -65,6 +66,15 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
             // Its own route, not a PATCH field: publishing is a one-way
             // transition with its own ability. See PostUpdateRequest.
             Route::post('/{post}/publish', [PostApiController::class, 'publish'])->name('publish');
+
+            // Comments live on the boilerplate's generic, polymorphic Comment
+            // model; this nested pair addresses the post by uuid like every
+            // other Stourify route, rather than the generic
+            // /api/v1/comments?commentable_type=<FQCN>&commentable_id=<int>
+            // surface, which PostResource has no numeric id to support. See
+            // PostCommentApiController.
+            Route::get('/{post}/comments', [PostCommentApiController::class, 'index'])->name('comments.index');
+            Route::post('/{post}/comments', [PostCommentApiController::class, 'store'])->name('comments.store');
         });
 
         Route::prefix('follows')->name('follows.')->group(function (): void {

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`GET`/`POST /api/v1/posts/{post}/comments`** — a module-owned, uuid-addressed adapter over the
+  boilerplate's generic, polymorphic `Comment` (`HasComments` on `Post`). The mobile client already
+  called these two routes (`mobile/src/shared/api/comments.ts`) and got 404s: comments only existed
+  on `GET/POST /api/v1/comments?commentable_type=<FQCN>&commentable_id=<int>`, and `PostResource`
+  never returns a numeric id, so that generic surface was unreachable from the app. Comments on
+  `PostDetailScreen` were broken end to end. `PostCommentApiController` delegates authorization to
+  `PostPolicy::view()` before either endpoint touches a comment — a viewer who cannot see the post
+  (unpublished, private, or a followers-only post by someone they don't follow) gets 403 on both,
+  not just a filtered list. Listing is newest-first, paginated, with the commenter eager-loaded;
+  `parent_id` is validated to belong to the *same* post's thread, not just to exist. Writes go
+  through `CrudService::for(Comment::class)` (resolves to the boilerplate's own
+  `CommentCrudService`); reads through `Comment::getCachedList()`, tagged
+  `Post:{uuid}:comments` to match `Comment::$invalidatesRelationCachesOf`'s own tag naming.
+  - **Deviation, not a workaround for this module:** `commentable_type` is written and queried as
+    the FQCN (`Modules\Stourify\Models\Post::class`), not the registered `stourify_post` morph
+    alias every other Stourify attachment uses. `CommentCrudService::beforeCreate()` calls static
+    methods directly on the raw `commentable_type` string without first resolving it through
+    `Relation::getMorphedModel()` — unlike `ReactionCrudService::assertSupportedType()`, which does.
+    Passing the alias throws `Class "stourify_post" not found`. That asymmetry is a pre-existing
+    boilerplate defect affecting every caller of the generic comment write path, not something
+    Task 2 introduces; fixing it means editing `saas-boilerplate`, which is out of scope here (the
+    boilerplate stays module-agnostic and untouched). Tracked for a future boilerplate-side fix.
+  - New: `Http/Controllers/Api/V1/PostCommentApiController.php`,
+    `Http/Requests/PostCommentStoreRequest.php`, `tests/Feature/PostCommentApiTest.php`.
+
 ### Fixed
 
 - **`PostResource` exposes author identity** — a nested `author` object (`{uuid, name, username,
