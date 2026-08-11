@@ -9,7 +9,9 @@ use App\Events\Domain\UserRegistered;
 use App\Models\Media;
 use App\Models\Reaction;
 use App\Providers\ModuleBaseServiceProvider;
+use App\Registries\LegalDocumentRegistry;
 use App\Registries\ModuleRegistry;
+use App\Support\LegalDocument;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Modules\Stourify\Listeners\JoinPublicOrganizationAsExplorer;
@@ -90,6 +92,8 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
 
         Relation::morphMap($map);
 
+        $this->registerLegalDocuments();
+
         // Keeps sto_spots.rating_average and reviews_count truthful regardless
         // of how a review was written — API, sync push, seeder or factory.
         Review::observe(ReviewObserver::class);
@@ -115,6 +119,56 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         foreach (SyncRegistry::tables() as $table) {
             SyncRegistry::model($table)::observe(SyncTombstoneObserver::class);
         }
+    }
+
+    /**
+     * Publish the public legal documents into the platform's registry.
+     *
+     * The platform owns the URL shape (/privacy, /terms, /account-deletion and
+     * /legal/{slug}) and the renderer; it has no idea what any product's policy
+     * says. This module owns the words, which is why the bodies are markdown files
+     * under resources/legal — a lawyer's revision should be a diff to prose.
+     *
+     * Google Play requires all three: a privacy-policy URL and a web-reachable
+     * account-deletion URL for the listing, and terms for a user-generated-content
+     * app. They must answer an unauthenticated GET, which is why the routes carry
+     * no guard.
+     *
+     * `isPlaceholder: true` is what puts the visible "pending legal review" banner
+     * on the page. It stays true until a lawyer has actually reviewed the text and
+     * every [BRACKETED] value has been filled in — see STOURIFY-34.
+     */
+    private function registerLegalDocuments(): void
+    {
+        $dir = $this->moduleBasePath() . '/resources/legal';
+        $updated = '11 August 2026';
+
+        app(LegalDocumentRegistry::class)->register(
+            new LegalDocument(
+                slug: 'privacy',
+                title: 'Privacy Policy',
+                path: $dir . '/privacy.md',
+                updatedAt: $updated,
+                isPlaceholder: true,
+                summary: 'What Stourify collects, why, where it goes, and how to remove it.',
+            ),
+            new LegalDocument(
+                slug: 'terms',
+                title: 'Terms of Service',
+                path: $dir . '/terms.md',
+                updatedAt: $updated,
+                isPlaceholder: true,
+                summary: 'The rules for using Stourify and for the content you publish on it.',
+            ),
+            new LegalDocument(
+                slug: 'account-deletion',
+                title: 'Delete Your Account',
+                path: $dir . '/account-deletion.md',
+                updatedAt: $updated,
+                isPlaceholder: true,
+                summary: 'How to delete your Stourify account, and exactly what happens when you do.',
+            ),
+        );
     }
 
     protected function moduleClass(): string
