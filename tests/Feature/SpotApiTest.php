@@ -549,3 +549,26 @@ test('two spots sharing a title get distinct slugs', function (): void {
     expect($first)->toBe('sunset-point')
         ->and($second)->toBe('sunset-point-2');
 });
+
+/**
+ * STOURIFY-23. `CrudService` has always gated this create, but only after the
+ * rule set above had already run — so an unpermitted caller was answered with
+ * a 422 describing the payload the server wanted. `SpotStoreRequest::authorize()`
+ * now runs first, which is why an invalid body still comes back 403.
+ */
+test('creating a spot is denied without the create permission, whatever the payload', function (): void {
+    actingAsExplorer($this->createUserWithPermissions($this->organization, ['stourify.spots.view']));
+
+    $before = Spot::query()->count();
+
+    $this->postJson('/api/v1/spots', [
+        'title' => 'Hidden Cove',
+        'latitude' => 10.3,
+        'longitude' => 123.9,
+    ], orgHeader($this->organization))->assertForbidden();
+
+    $this->postJson('/api/v1/spots', ['title' => 'x'], orgHeader($this->organization))
+        ->assertForbidden();
+
+    expect(Spot::query()->count())->toBe($before);
+});

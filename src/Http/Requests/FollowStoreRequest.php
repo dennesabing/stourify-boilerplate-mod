@@ -26,6 +26,18 @@ use Modules\Stourify\Models\Follow;
 class FollowStoreRequest extends BaseFormRequest
 {
     /**
+     * Gate the endpoint here, ahead of validation — `CrudService` authorizes
+     * the same ability, but only after the rules below have already run for a
+     * caller who may not follow anyone at all (STOURIFY-23). The `exists`
+     * lookup on `users` makes that ordering matter more than usual: it answers
+     * whether an account exists, to someone the module has not authorized.
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->can('create', Follow::class) ?? false;
+    }
+
+    /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array

@@ -421,3 +421,24 @@ test('the explorer resource never exposes an email address', function (): void {
         ->assertOk()
         ->assertJsonMissing(['email' => $this->bob->email]);
 });
+
+/**
+ * STOURIFY-23 — see SpotApiTest for the ordering this asserts. The invalid-body
+ * half matters more here than elsewhere: the `user_uuid` rule is an `exists`
+ * lookup on `users`, so validating ahead of the gate told an unauthorized
+ * caller whether an account exists.
+ */
+test('following is denied without the follows permission, whatever the payload', function (): void {
+    actingAsExplorerUser($this->createUserWithPermissions($this->organization, []));
+
+    $before = Follow::query()->count();
+
+    $this->postJson('/api/v1/follows', [
+        'user_uuid' => $this->bob->uuid,
+    ], orgHeader($this->organization))->assertForbidden();
+
+    $this->postJson('/api/v1/follows', ['user_uuid' => 'not-a-uuid'], orgHeader($this->organization))
+        ->assertForbidden();
+
+    expect(Follow::query()->count())->toBe($before);
+});

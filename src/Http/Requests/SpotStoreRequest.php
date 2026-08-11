@@ -8,22 +8,34 @@ use App\Http\Requests\BaseFormRequest;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 use Modules\Stourify\Enums\SpotStatus;
+use Modules\Stourify\Models\Spot;
 
 /**
  * Validates a new spot.
- *
- * `authorize()` stays `true` per the platform convention documented on
- * BaseFormRequest — the create ability is enforced by `CrudService`, which
- * calls `Gate::authorize('create', Spot::class)` before it writes. That is the
- * "explicit Gate check" the root CLAUDE.md permits, and keeping it in one
- * place means the web controller, the API controller and the sync push path
- * cannot drift apart.
  *
  * A client may only create a spot as `draft` or `published`. `under_review`
  * and `removed` are moderation outcomes, never something an author asks for.
  */
 class SpotStoreRequest extends BaseFormRequest
 {
+    /**
+     * Gate the endpoint here, ahead of validation.
+     *
+     * This request previously documented the opposite choice — leave
+     * `authorize()` at the `BaseFormRequest` default and let `CrudService` own
+     * the check, so the web controller, the API controller and the sync push
+     * path could not drift apart. That reasoning holds and `CrudService` still
+     * runs its gate; what it missed is *when*. Laravel authorizes before it
+     * validates, so a check that lives only in `CrudService` runs after the
+     * whole rule set — including the `exists` lookups below — has already
+     * answered a caller who may not create a spot at all. One lock is not
+     * enough when the question is which door opens first (STOURIFY-23).
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->can('create', Spot::class) ?? false;
+    }
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
