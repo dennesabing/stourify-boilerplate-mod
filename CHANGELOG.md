@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The privacy policy's photo-metadata paragraph now describes what the app does, not what it used
+  to.** (STOURIFY-40) `resources/legal/privacy.md` §2.5 carried a warning that the app did **not**
+  strip metadata from image files, and that warning was honest when it was written. The mobile app now
+  removes it on the device before a photo is uploaded, so the warning had become the opposite of the
+  truth — which is the same defect as overclaiming, just in the other direction.
+
+  The replacement explains what the hidden information is and where it goes, and keeps naming the
+  gaps: PNG and HEIC stills and **video** are not stripped, so anyone uploading one should still
+  remove the metadata themselves. `tests/Feature/LegalDocumentsTest.php` pins both halves — the new
+  claim must be present and the old disclaimer must be absent, so the two can never sit on the page
+  contradicting each other. The document's `isPlaceholder` handling is untouched.
+
 - **`GET /spots/nearby` distance ordering is now asserted over a dataset a shuffle cannot pass by
   luck.** (STOURIFY-8) The existing coverage compared two spots, which a random order clears half
   the time. `tests/Feature/SpotApiTest.php` adds a five-spot General Santos cluster, all on one

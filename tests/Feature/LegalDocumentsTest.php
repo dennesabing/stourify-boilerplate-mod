@@ -64,7 +64,25 @@ it('describes the collection surfaces the app actually has', function (): void {
         ->and($text)->toContain('read_media_images')
         ->and($text)->toContain('digitalocean spaces') // media storage
         ->and($text)->toContain('offline')           // WatermelonDB local database
-        ->and($text)->toContain('exif');             // metadata is NOT stripped
+        ->and($text)->toContain('exif');             // photo metadata, now stripped on the device
+});
+
+it('describes photo metadata as stripped on the device, and still names what is not', function (): void {
+    // This page used to warn that metadata was NOT removed, and that warning was
+    // true when it was written. STOURIFY-40 made it false: the mobile app now
+    // strips EXIF before a photo ever leaves the phone. A policy that describes
+    // last month's behaviour is the same defect as one that overclaims, so the
+    // wording is pinned here in both directions.
+    $text = strtolower(strip_tags($this->get('/privacy')->assertOk()->getContent()));
+
+    expect($text)->toContain('removed on your device')
+        // The old disclaimer, gone. Its presence alongside the new paragraph
+        // would leave the page contradicting itself.
+        ->and($text)->not->toContain('does not currently strip')
+        // And the honest remainder: JPEG is covered, video and other formats are
+        // not, so the page must keep saying so.
+        ->and($text)->toContain('jpeg')
+        ->and($text)->toContain('video');
 });
 
 it('does not claim collection the app does not perform', function (): void {
