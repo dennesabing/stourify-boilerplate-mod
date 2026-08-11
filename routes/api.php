@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
+use Modules\Stourify\Http\Controllers\Api\V1\BlockApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\FeedApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\FollowApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\PostApiController;
@@ -89,6 +90,16 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
             // remove-a-follower are all the same delete from either side.
             Route::post('/{follow}/accept', [FollowApiController::class, 'accept'])->name('accept');
             Route::delete('/{follow}', [FollowApiController::class, 'destroy'])->name('destroy');
+        });
+
+        Route::prefix('blocks')->name('blocks.')->group(function (): void {
+            // Three operations and no more — and deliberately no way to ask
+            // who has blocked you. The index is the caller's own rows; the
+            // blocked party has no ability on this resource at all. See
+            // BlockApiController.
+            Route::get('/', [BlockApiController::class, 'index'])->name('index');
+            Route::post('/', [BlockApiController::class, 'store'])->name('store');
+            Route::delete('/{block}', [BlockApiController::class, 'destroy'])->name('destroy');
         });
 
         Route::prefix('wishlist')->name('wishlist.')->group(function (): void {

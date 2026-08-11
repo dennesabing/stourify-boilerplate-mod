@@ -160,6 +160,13 @@ class Post extends Model implements HasMedia
      * post is a management concern the index layers on top via
      * `viewAnyRestricted`; a moderator's *feed* is still just their feed.
      *
+     * Blocks cut across all of it, outside the audience branches rather than
+     * inside them. A block is symmetric — it hides the blocked party's posts
+     * from the blocker AND the blocker's from the blocked party — so it cannot
+     * be expressed as a condition on visibility or on the follow edge, both of
+     * which are directional. Stripping the authors first also means no later
+     * branch can accidentally admit one back.
+     *
      * @param  Builder<Post>  $query
      * @return Builder<Post>
      */
@@ -170,14 +177,16 @@ class Post extends Model implements HasMedia
             ->where('status', FollowStatus::Active->value)
             ->pluck('followee_id');
 
-        return $query->where(fn (Builder $scoped) => $scoped
-            ->where('user_id', $viewer->id)
-            ->orWhere(fn (Builder $others) => $others
-                ->whereNotNull('published_at')
-                ->where(fn (Builder $audience) => $audience
-                    ->where('visibility', PostVisibility::Public->value)
-                    ->orWhere(fn (Builder $followers) => $followers
-                        ->where('visibility', PostVisibility::Followers->value)
-                        ->whereIn('user_id', $followedAuthorIds)))));
+        return $query
+            ->whereNotIn('user_id', Block::hiddenUserIdsFor($viewer))
+            ->where(fn (Builder $scoped) => $scoped
+                ->where('user_id', $viewer->id)
+                ->orWhere(fn (Builder $others) => $others
+                    ->whereNotNull('published_at')
+                    ->where(fn (Builder $audience) => $audience
+                        ->where('visibility', PostVisibility::Public->value)
+                        ->orWhere(fn (Builder $followers) => $followers
+                            ->where('visibility', PostVisibility::Followers->value)
+                            ->whereIn('user_id', $followedAuthorIds)))));
     }
 }
