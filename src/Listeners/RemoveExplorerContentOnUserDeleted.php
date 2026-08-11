@@ -26,10 +26,11 @@ use Modules\Stourify\Observers\SyncTombstoneObserver;
  * `cascadeOnDelete`, removes this module's rows without a line of code.
  *
  * That is a correct end state and a poor experience of it. The retention window
- * is six months by default, so relying on the cascade alone means the app tells
- * a person their account is deleted while continuing to publish their
- * photographs, spots and reviews to everyone else for half a year. "Deleted"
- * has to be true the moment they ask, not only eventually.
+ * is eighteen months by default (`config('prune.retention_months')`), so relying
+ * on the cascade alone means the app tells a person their account is deleted
+ * while continuing to publish their photographs, spots and reviews to everyone
+ * else for a year and a half. "Deleted" has to be true the moment they ask, not
+ * only eventually — and the published privacy policy says exactly that.
  *
  * So the cascade stays as the mechanism that *erases*, and this listener is the
  * mechanism that *withdraws*. The platform announces `UserDeleted`; this module

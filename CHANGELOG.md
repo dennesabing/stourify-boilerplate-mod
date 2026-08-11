@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Privacy policy, terms of service and an account-deletion page, published at stable public URLs**
+  (STOURIFY-34). Google Play will not accept a listing without a privacy-policy URL and a
+  web-reachable account-deletion URL, and a user-generated-content app without terms does not pass
+  review. The three documents now live as markdown under `resources/legal/` and are registered into
+  the platform's `LegalDocumentRegistry` during boot, so they are served at `/privacy`, `/terms` and
+  `/account-deletion` — unauthenticated, server-rendered, no new infrastructure and no separate
+  deployment. Markdown rather than PHP because a lawyer's revision should be a diff to prose.
+
+  **The content is a placeholder and every page says so, visibly.** A banner at the top of each
+  document states that the text awaits legal review, and every value no agent should invent — the
+  legal entity, the address, the contacts, the governing law, the minimum age, the liability cap —
+  is left as a `[BRACKETED]` token. A placeholder that does not announce itself is worse than no
+  page at all, because it invites being shipped by accident.
+
+  What is *not* placeholder is the factual half, which was written from the code rather than from a
+  template, because Play's Data safety form must match the app's actual behaviour or the build is
+  rejected. The policy therefore names foreground-only location (`ACCESS_FINE_LOCATION`,
+  `ACCESS_COARSE_LOCATION`, and explicitly no background location or geofencing), camera and photo
+  library access, media stored on DigitalOcean Spaces in `sgp1` with **public** file visibility,
+  the offline WatermelonDB copy held on the device, and the follow/block/report graph. It also
+  discloses that **EXIF metadata is not stripped from uploads**, which is true today and can embed
+  the coordinates a photo was taken at. Equally load-bearing are the honest negatives: no analytics
+  SDK, no crash reporter, no advertising or ad identifiers, no device identifiers, no push tokens and
+  no third-party sign-in — all verifiable in the source, and all things Data safety asks about.
+
+  The deletion facts are stated in plain language, including the consequence a departing user will
+  actually hit: because the account row survives the 18-month retention window and `users.email` is
+  unique, **a deleted account's email address cannot be re-registered until that window elapses.**
+  The window in the prose is asserted against `config('prune.retention_months')` by a test, so the
+  page cannot quietly drift away from what the code does.
+
 - **The profile header now says what the CALLER's relationship to it is** (STOURIFY-35).
   `ProfileResource` gains a `viewer` block — `{is_self, is_following, follow_status, follow_uuid}` —
   computed by `ProfileApiController` from the caller's own outgoing edge. Nothing in the platform
