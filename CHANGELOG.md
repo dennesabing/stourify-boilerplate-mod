@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`StourifyDemoContentSeeder` now gates itself on `config('stourify.seed_demo_content')`, which is
+  off when `APP_ENV=production`** (STOURIFY-17). Deploys now run every seeder a module publishes
+  (`php artisan modules:seed`), and that command deliberately cannot special-case one — a
+  module-agnostic runner that knew which of a module's seeders were "the demo one" would not be
+  module-agnostic. So the decision has to live in the seeder. Without it, the fix for the
+  fresh-install defect would have started writing fixture spots into live content on every deploy.
+  Set `STOURIFY_SEED_DEMO_CONTENT=true` on a demo host that actually wants the General Santos
+  samples. The public-organization and explorer-backfill seeders are unconditional, as before —
+  they provision structure, not content.
+
 ### Fixed
 
 - **The module's create endpoints validated before they authorized, so an unpermitted caller was
