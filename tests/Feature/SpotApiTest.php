@@ -308,6 +308,56 @@ test('nearby returns spots inside the radius, closest first, with a distance', f
         ->and($data[0]['distance_km'])->toBeLessThan(0.01);
 });
 
+/**
+ * The M4 gate criterion: ordering, asserted over a dataset big enough that a
+ * shuffle cannot pass by luck.
+ *
+ * Every spot sits due north of the viewer on the General Santos meridian, so
+ * the separation is pure latitude and the expected sequence is arithmetic
+ * rather than a guess — 0 km, ~1.1 km, ~2.6 km, ~5.3 km, ~8.1 km. They are
+ * created out of order on purpose: the assertion is that the endpoint sorts,
+ * not that the fixture happened to be inserted sorted.
+ */
+test('nearby orders the seeded GenSan cluster by distance regardless of insert order', function (): void {
+    $gensanLat = 6.1164;
+    $gensanLng = 125.1716;
+
+    $cluster = collect([
+        'lagao' => 6.1642,   // ~5.3 km
+        'plaza' => 6.1164,   // 0 km — the viewer stands on it
+        'gym' => 6.1893,     // ~8.1 km
+        'port' => 6.1400,    // ~2.6 km
+        'oval' => 6.1264,    // ~1.1 km
+    ])->map(fn (float $latitude, string $key): Spot => Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+        'title' => ucfirst($key),
+        'latitude' => $latitude,
+        'longitude' => $gensanLng,
+    ]));
+
+    actingAsExplorer($this->explorer);
+
+    $data = $this->getJson("/api/v1/spots/nearby?lat={$gensanLat}&lng={$gensanLng}&radius=10", orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($data)->pluck('uuid')->all())->toBe([
+        $cluster['plaza']->uuid,
+        $cluster['oval']->uuid,
+        $cluster['port']->uuid,
+        $cluster['lagao']->uuid,
+        $cluster['gym']->uuid,
+    ]);
+
+    // The reported distances must agree with the order, not merely accompany it.
+    $distances = collect($data)->pluck('distance_km')->all();
+    expect($distances)->toBe(collect($distances)->sort()->values()->all())
+        ->and($distances[0])->toBeLessThan(0.01)
+        ->and($distances[1])->toBeGreaterThan(1.0)->toBeLessThan(1.2)
+        ->and($distances[4])->toBeGreaterThan(8.0)->toBeLessThan(8.2);
+});
+
 test('distance_km is absent outside the nearby endpoint', function (): void {
     Spot::factory()->for($this->organization)
         ->create(['user_id' => $this->explorer->id, 'status' => SpotStatus::Published]);

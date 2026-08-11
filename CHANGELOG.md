@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`GET /spots/nearby` distance ordering is now asserted over a dataset a shuffle cannot pass by
+  luck.** (STOURIFY-8) The existing coverage compared two spots, which a random order clears half
+  the time. `tests/Feature/SpotApiTest.php` adds a five-spot General Santos cluster, all on one
+  meridian so the separations are arithmetic — 0, ~1.1, ~2.6, ~5.3, ~8.1 km — created out of order
+  on purpose, and asserts the full returned sequence plus that the reported `distance_km` values
+  are themselves sorted and land in the expected bands. The endpoint itself is unchanged; what
+  changed is that its contract is now pinned. Mobile had never called this route (see the mobile
+  changelog, STOURIFY-8), so nothing had exercised the ordering in practice.
+
 ### Added
 
 - **Privacy policy, terms of service and an account-deletion page, published at stable public URLs**
