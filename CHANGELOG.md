@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **An explorer's content is withdrawn the moment they delete their account** (STOURIFY-32).
+  `RemoveExplorerContentOnUserDeleted` listens for the platform's new `UserDeleted` and soft-deletes
+  the departing explorer's spots, posts and reviews, and hard-deletes their wishlist items, explorer
+  profile and follow edges in **both** directions. Without it the cascading foreign keys would still
+  do the job eventually — but "eventually" is the platform's retention window, six months by
+  default, during which the app would be telling somebody their account is deleted while continuing
+  to publish their photographs to everybody else. So the cascade remains what *erases*; this
+  listener is what *withdraws*. The rows are deleted one model at a time rather than by a mass
+  query, which costs extra statements and buys the only thing that makes the deletion reach devices
+  that already hold the data: a mass delete skips model events, so `SyncTombstoneObserver` never
+  fires and a client that was offline during the deletion would keep the content forever.
+
 ### Changed
 
 - **`StourifyDemoContentSeeder` now gates itself on `config('stourify.seed_demo_content')`, which is

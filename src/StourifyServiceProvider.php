@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Stourify;
 
+use App\Events\Domain\UserDeleted;
 use App\Events\Domain\UserRegistered;
 use App\Models\Media;
 use App\Models\Reaction;
@@ -12,6 +13,7 @@ use App\Registries\ModuleRegistry;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Modules\Stourify\Listeners\JoinPublicOrganizationAsExplorer;
+use Modules\Stourify\Listeners\RemoveExplorerContentOnUserDeleted;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Follow;
@@ -96,6 +98,12 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         // Every newly-registered user becomes an explorer of the public org —
         // membership is required to act on any of its content.
         Event::listen(UserRegistered::class, JoinPublicOrganizationAsExplorer::class);
+
+        // An explorer who deletes their account has their content withdrawn at
+        // once, rather than staying published until the platform's retention
+        // job erases it. The boilerplate announces the deletion; deciding what
+        // it means for sto_* tables is this module's job, not the platform's.
+        Event::listen(UserDeleted::class, RemoveExplorerContentOnUserDeleted::class);
 
         // Records one tombstone per delete — hard (Follow, WishlistItem) and
         // soft (Spot, Review, City) alike — so the offline-sync delta can
