@@ -26,6 +26,16 @@ use Modules\Stourify\Models\WishlistItem;
 class WishlistStoreRequest extends BaseFormRequest
 {
     /**
+     * Gate the endpoint here, ahead of validation — `CrudService` authorizes
+     * the same ability, but only after the rules below have already run for a
+     * caller who may not save a spot at all (STOURIFY-23).
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->can('create', WishlistItem::class) ?? false;
+    }
+
+    /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array

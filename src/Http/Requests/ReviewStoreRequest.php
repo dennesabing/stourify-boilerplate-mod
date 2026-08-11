@@ -23,6 +23,16 @@ use Modules\Stourify\Models\Spot;
 class ReviewStoreRequest extends BaseFormRequest
 {
     /**
+     * Gate the endpoint here, ahead of validation — `CrudService` authorizes
+     * the same ability, but only after the rules below have already run for a
+     * caller who may not create a review at all (STOURIFY-23).
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->can('create', Review::class) ?? false;
+    }
+
+    /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array

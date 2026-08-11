@@ -384,3 +384,22 @@ test('helpful_count is not writable by the author', function (): void {
 
     expect($review->fresh()->helpful_count)->toBe(0);
 });
+
+/**
+ * STOURIFY-23 — see SpotApiTest for the ordering this asserts.
+ */
+test('creating a review is denied without the create permission, whatever the payload', function (): void {
+    actingAsReviewer($this->createUserWithPermissions($this->organization, ['stourify.reviews.view']));
+
+    $before = Review::query()->count();
+
+    $this->postJson('/api/v1/reviews', [
+        'spot_uuid' => $this->spot->uuid,
+        'rating' => 5,
+    ], orgHeader($this->organization))->assertForbidden();
+
+    $this->postJson('/api/v1/reviews', ['rating' => 99], orgHeader($this->organization))
+        ->assertForbidden();
+
+    expect(Review::query()->count())->toBe($before);
+});

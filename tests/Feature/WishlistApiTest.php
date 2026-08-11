@@ -230,3 +230,21 @@ test('saving is denied without the wishlist permission', function (): void {
         'spot_uuid' => $this->spot->uuid,
     ], orgHeader($this->organization))->assertForbidden();
 });
+
+/**
+ * STOURIFY-23 — see SpotApiTest for the ordering this asserts.
+ */
+test('saving a spot is denied without the wishlist permission, whatever the payload', function (): void {
+    actingAsWisher($this->createUserWithPermissions($this->organization, []));
+
+    $before = WishlistItem::query()->count();
+
+    $this->postJson('/api/v1/wishlist', [
+        'spot_uuid' => $this->spot->uuid,
+    ], orgHeader($this->organization))->assertForbidden();
+
+    $this->postJson('/api/v1/wishlist', ['spot_uuid' => 'not-a-uuid'], orgHeader($this->organization))
+        ->assertForbidden();
+
+    expect(WishlistItem::query()->count())->toBe($before);
+});

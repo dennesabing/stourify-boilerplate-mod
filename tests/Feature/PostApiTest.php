@@ -415,6 +415,37 @@ test('listing posts is denied without the view permission', function (): void {
     $this->getJson('/api/v1/posts', orgHeader($this->organization))->assertForbidden();
 });
 
+test('creating a post is denied without the create permission, and writes nothing', function (): void {
+    actingAsPoster($this->createUserWithPermissions($this->organization, ['stourify.posts.view']));
+
+    $before = Post::query()->count();
+
+    $this->postJson('/api/v1/posts', [
+        'spot_uuid' => $this->spot->uuid,
+        'caption' => 'Should never exist.',
+    ], orgHeader($this->organization))->assertForbidden();
+
+    expect(Post::query()->count())->toBe($before);
+});
+
+/**
+ * The ordering half of STOURIFY-23, and the reason the gate belongs in the
+ * FormRequest rather than only in CrudService. A request whose `authorize()`
+ * returns true validates first, so a caller who may not create anything at all
+ * was answered with 422 and a field-by-field description of the payload the
+ * server wanted — a shape they have no business learning. Authorizing in the
+ * FormRequest runs the check ahead of validation, so the answer is 403 whatever
+ * the body contains.
+ */
+test('creating a post is denied before validation runs, so an invalid payload still returns 403', function (): void {
+    actingAsPoster($this->createUserWithPermissions($this->organization, ['stourify.posts.view']));
+
+    $this->postJson('/api/v1/posts', [
+        'spot_uuid' => 'not-a-uuid',
+        'visibility' => 'everyone',
+    ], orgHeader($this->organization))->assertForbidden();
+});
+
 test('one explorer cannot edit, publish or delete another explorer\'s post', function (): void {
     $post = Post::factory()->for($this->organization)->create([
         'user_id' => $this->author->id, 'spot_id' => $this->spot->id, 'published_at' => null,

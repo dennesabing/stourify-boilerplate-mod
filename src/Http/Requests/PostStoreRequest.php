@@ -8,6 +8,7 @@ use App\Http\Requests\BaseFormRequest;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 use Modules\Stourify\Enums\PostVisibility;
+use Modules\Stourify\Models\Post;
 
 /**
  * Validates a new post.
@@ -22,6 +23,23 @@ use Modules\Stourify\Enums\PostVisibility;
  */
 class PostStoreRequest extends BaseFormRequest
 {
+    /**
+     * Gate the endpoint here, ahead of validation.
+     *
+     * `CrudService::create()` already authorizes this ability, so this is not
+     * the only lock on the door — but it is the one that fires *first*. Laravel
+     * runs `authorize()` before `rules()`, so without this override a caller who
+     * may not create a post at all was answered with a 422 itemising the fields
+     * the server wanted, and only reached 403 if their payload happened to
+     * validate. That ordering is the defect STOURIFY-23 records; the root
+     * CLAUDE.md's "authorize in the FormRequest (preferred)" is the rule that
+     * prevents it.
+     */
+    public function authorize(): bool
+    {
+        return $this->user()?->can('create', Post::class) ?? false;
+    }
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */

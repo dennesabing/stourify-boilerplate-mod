@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The module's create endpoints validated before they authorized, so an unpermitted caller was
+  answered with 422 instead of 403** (STOURIFY-23). Laravel runs a FormRequest's `authorize()`
+  ahead of its `rules()`, and these five requests left `authorize()` at the `BaseFormRequest`
+  default of `true` — so the only gate was `CrudService`'s `Gate::authorize()`, which fires after
+  the controller has been reached and therefore after the whole rule set has run. A caller holding
+  none of the module's create permissions got a field-by-field description of the payload the
+  server wanted, and only reached 403 if their body happened to validate. `FollowStoreRequest`'s
+  `user_uuid` rule made it worse than cosmetic: an `exists` lookup on `users` told an unauthorized
+  caller whether an account exists. `PostStoreRequest`, `SpotStoreRequest`, `ReviewStoreRequest`,
+  `WishlistStoreRequest` and `FollowStoreRequest` now each override `authorize()` against their
+  policy's `create` ability, per the root `CLAUDE.md`'s *authorize in the FormRequest (preferred)*.
+  `CrudService` keeps its central gate as the backstop; no permission, policy or role grant
+  changed.
+
+  **What this card did not find:** the reported defect. STOURIFY-23 was raised on a live
+  observation that `POST /api/v1/posts` returned 201 for a user without `stourify.posts.create`.
+  It does not — the audit swept every write path in `src/Http/Controllers/Api/V1` and all of them
+  route through `CrudService`, which gates them. The probe read `hasPermissionTo()` without a
+  Spatie team id set, which reports no roles for any user in a team-scoped install; a real request
+  sets that context via `set_organization_from_header`. The regression test added here asserts the
+  valid-payload 403 that already held, so the claim cannot be re-lost.
+
 - **Media uploads 403'd for everyone, so no photo could be attached to a post or a spot**
   (STOURIFY-22). The platform resolves an attachable's permission as
   `{host::permissionPrefix()}.media.{verb}` — `posts.media.create`, `spots.media.create` — and
@@ -23,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ownership rule.
 
 ### Added
+
+- Regression coverage for create-endpoint authorization (STOURIFY-23) in `PostApiTest`,
+  `SpotApiTest`, `ReviewApiTest`, `WishlistApiTest` and `FollowApiTest` — each asserts 403 and an
+  unchanged row count for a caller without the permission, with a **valid** body and again with an
+  invalid one. The invalid-body half is the one that was red before the fix; the valid-body half
+  pins the behaviour the card mistakenly reported as broken.
 
 - **`StourifyMediaPolicy`** — media rights on this module's photo hosts now follow *write* rights on
   the host. A role grant is not scoped to a host instance, so `posts.media.create` on `explorer`
