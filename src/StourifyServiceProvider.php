@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Stourify;
 
 use App\Events\Domain\UserRegistered;
+use App\Models\Media;
 use App\Models\Reaction;
 use App\Providers\ModuleBaseServiceProvider;
 use App\Registries\ModuleRegistry;
@@ -28,6 +29,7 @@ use Modules\Stourify\Policies\PostPolicy;
 use Modules\Stourify\Policies\ReportPolicy;
 use Modules\Stourify\Policies\ReviewPolicy;
 use Modules\Stourify\Policies\SpotPolicy;
+use Modules\Stourify\Policies\StourifyMediaPolicy;
 use Modules\Stourify\Policies\WishlistItemPolicy;
 use Modules\Stourify\Support\Sync\SyncRegistry;
 
@@ -117,6 +119,13 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
     /**
      * Policies land here as each resource gains its API surface in M1.
      *
+     * Media is the platform's model, not the module's, and it is deliberately
+     * re-pointed at StourifyMediaPolicy: a `posts.media.create` role grant is
+     * not scoped to a host instance, so something has to require write rights
+     * on the host before a photo lands on it. That subclass defers to
+     * App\Policies\MediaPolicy for every host this module does not own, so the
+     * override is confined to Stourify's own hosts (STOURIFY-22).
+     *
      * @return array<class-string, class-string>
      */
     protected function policyMap(): array
@@ -129,6 +138,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
             WishlistItem::class => WishlistItemPolicy::class,
             ExplorerProfile::class => ExplorerProfilePolicy::class,
             Report::class => ReportPolicy::class,
+            Media::class => StourifyMediaPolicy::class,
         ];
     }
 }
