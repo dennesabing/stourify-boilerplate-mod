@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The profile header now says what the CALLER's relationship to it is** (STOURIFY-35).
+  `ProfileResource` gains a `viewer` block — `{is_self, is_following, follow_status, follow_uuid}` —
+  computed by `ProfileApiController` from the caller's own outgoing edge. Nothing in the platform
+  exposed this before, which had two consequences on the client: a Follow button that always read
+  "Follow" whatever the relationship, and no way at all to unfollow, because `DELETE /follows/{uuid}`
+  addresses the *edge* and the client had no way to learn its uuid short of paging the whole follow
+  list. `follow_status` is three-valued (`null` / `pending` / `active`) rather than a boolean pair:
+  a pending request to a private account renders "Requested", which is neither following nor
+  not-following, and collapsing it would offer to send a request that already exists. Deliberately
+  the caller's *outgoing* edge only — the reverse ("they follow me") belongs to the followers list,
+  and a button reading it would offer to unfollow somebody never followed. One indexed lookup,
+  skipped entirely when the caller is the subject.
+
+- **`GET /posts?user_uuid=` — one explorer's posts**, for the other-user profile grid (STOURIFY-35).
+  A filter on the existing index rather than a new `/users/{uuid}/posts` route, applied *after*
+  `visibleTo()`, so it narrows an already-scoped query and can never surface another explorer's
+  unpublished or followers-only work. Validated rather than silently ignored: an unvalidated filter
+  Laravel discards would list every visible post while the client believed it was showing one
+  person's.
+
 - **Blocking — an explorer can now block another, and it holds on both sides of the graph**
   (STOURIFY-36). New `sto_blocks` table and `Block` model, and a deliberately narrow API at
   `/api/v1/blocks`: list your own blocks, add one (idempotent, so a double-tap is not an error),

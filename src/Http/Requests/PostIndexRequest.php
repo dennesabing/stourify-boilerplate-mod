@@ -31,6 +31,12 @@ class PostIndexRequest extends BaseFormRequest
             'spot_uuid' => ['nullable', 'uuid'],
             'mine' => ['nullable', 'boolean'],
 
+            // One explorer's grid, for the other-user profile (STOURIFY-35).
+            // Validated rather than silently ignored: an unvalidated filter
+            // Laravel discards would list EVERY visible post while the client
+            // believed it was showing one person's work.
+            'user_uuid' => ['nullable', 'uuid'],
+
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
             'sort' => ['nullable', Rule::in(self::SORTABLE)],

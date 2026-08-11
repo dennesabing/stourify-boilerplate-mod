@@ -157,6 +157,18 @@ test('anyone can read another explorer\'s public header', function (): void {
         ->assertJsonPath('data.bio', 'Coffee and coastlines.');
 });
 
+test('the header carries the explorer\'s display name, not just their handle', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->bob->id, 'username' => 'bob_explorer',
+    ]);
+
+    actingAsProfileUser($this->alice);
+    $this->getJson("/api/v1/profiles/{$this->bob->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.name', $this->bob->name)
+        ->assertJsonPath('data.username', 'bob_explorer');
+});
+
 test('a private account still exposes its header', function (): void {
     ExplorerProfile::factory()->for($this->organization)->private()->create([
         'user_id' => $this->bob->id, 'username' => 'bob_private',
@@ -229,6 +241,91 @@ test('the header counts reflect the graph', function (): void {
         ->assertJsonPath('data.counts.spots', 2)
         ->assertJsonPath('data.counts.followers', 1)
         ->assertJsonPath('data.counts.following', 1);
+});
+
+// ---------------------------------------------------------------------------
+// The viewer block — the relationship between the caller and the subject
+// ---------------------------------------------------------------------------
+
+test('the viewer block reports no relationship when the caller does not follow', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->bob->id, 'username' => 'bob_explorer',
+    ]);
+
+    actingAsProfileUser($this->alice);
+    $this->getJson("/api/v1/profiles/{$this->bob->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.viewer.is_self', false)
+        ->assertJsonPath('data.viewer.is_following', false)
+        ->assertJsonPath('data.viewer.follow_status', null)
+        ->assertJsonPath('data.viewer.follow_uuid', null);
+});
+
+test('the viewer block carries the edge uuid an unfollow needs', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->bob->id, 'username' => 'bob_explorer',
+    ]);
+    $edge = Follow::factory()->for($this->organization)->create([
+        'follower_id' => $this->alice->id, 'followee_id' => $this->bob->id,
+    ]);
+
+    actingAsProfileUser($this->alice);
+    $this->getJson("/api/v1/profiles/{$this->bob->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.viewer.is_following', true)
+        ->assertJsonPath('data.viewer.follow_status', 'active')
+        ->assertJsonPath('data.viewer.follow_uuid', $edge->uuid);
+});
+
+test('a pending request is not following, but is still addressable', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->private()->create([
+        'user_id' => $this->bob->id, 'username' => 'bob_private',
+    ]);
+    $edge = Follow::factory()->for($this->organization)->pending()->create([
+        'follower_id' => $this->alice->id, 'followee_id' => $this->bob->id,
+    ]);
+
+    actingAsProfileUser($this->alice);
+    $this->getJson("/api/v1/profiles/{$this->bob->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        // "Requested", not "Following" — the client renders a third state, and
+        // can still cancel the request because the uuid is here.
+        ->assertJsonPath('data.viewer.is_following', false)
+        ->assertJsonPath('data.viewer.follow_status', 'pending')
+        ->assertJsonPath('data.viewer.follow_uuid', $edge->uuid);
+});
+
+test('the viewer block reads the caller\'s own edge, not the reverse one', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->bob->id, 'username' => 'bob_explorer',
+    ]);
+    // Bob follows Alice. Alice does not follow Bob.
+    Follow::factory()->for($this->organization)->create([
+        'follower_id' => $this->bob->id, 'followee_id' => $this->alice->id,
+    ]);
+
+    actingAsProfileUser($this->alice);
+    $this->getJson("/api/v1/profiles/{$this->bob->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.viewer.is_following', false)
+        ->assertJsonPath('data.viewer.follow_uuid', null);
+});
+
+test('my own profile reports is_self and can never be followed', function (): void {
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->alice->id, 'username' => 'alice_gensan',
+    ]);
+
+    actingAsProfileUser($this->alice);
+    $this->getJson('/api/v1/profile', orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.viewer.is_self', true)
+        ->assertJsonPath('data.viewer.is_following', false);
+
+    // The same subject read through the public route agrees.
+    $this->getJson("/api/v1/profiles/{$this->alice->uuid}", orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.viewer.is_self', true);
 });
 
 // ---------------------------------------------------------------------------

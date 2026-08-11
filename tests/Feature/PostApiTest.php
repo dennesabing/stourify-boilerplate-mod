@@ -260,6 +260,63 @@ test('a post with no media returns an empty array, never null', function (): voi
 });
 
 // ---------------------------------------------------------------------------
+// Listing one explorer's posts — the other-user profile grid (STOURIFY-35)
+// ---------------------------------------------------------------------------
+
+test('user_uuid narrows the list to that explorer\'s posts', function (): void {
+    $mine = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->viewer->id, 'spot_id' => $this->spot->id,
+        'visibility' => PostVisibility::Public, 'published_at' => now(),
+    ]);
+    $theirs = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id,
+        'visibility' => PostVisibility::Public, 'published_at' => now(),
+    ]);
+
+    actingAsPoster($this->viewer);
+    $uuids = collect($this->getJson(
+        "/api/v1/posts?user_uuid={$this->author->uuid}", orgHeader($this->organization)
+    )->assertOk()->json('data'))->pluck('uuid');
+
+    expect($uuids)->toContain($theirs->uuid)->not->toContain($mine->uuid);
+});
+
+test('user_uuid does not widen visibility — a hidden post stays hidden', function (): void {
+    // The filter narrows an already-scoped query; it must never become a way
+    // to read someone's followers-only or unpublished work.
+    $restricted = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id,
+        'visibility' => PostVisibility::Followers, 'published_at' => now(),
+    ]);
+    $unpublished = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id,
+        'visibility' => PostVisibility::Public, 'published_at' => null,
+    ]);
+    $visible = Post::factory()->for($this->organization)->create([
+        'user_id' => $this->author->id, 'spot_id' => $this->spot->id,
+        'visibility' => PostVisibility::Public, 'published_at' => now(),
+    ]);
+
+    actingAsPoster($this->viewer);
+    $uuids = collect($this->getJson(
+        "/api/v1/posts?user_uuid={$this->author->uuid}", orgHeader($this->organization)
+    )->assertOk()->json('data'))->pluck('uuid');
+
+    expect($uuids)
+        ->toContain($visible->uuid)
+        ->not->toContain($restricted->uuid)
+        ->not->toContain($unpublished->uuid);
+});
+
+test('an unknown user_uuid is rejected rather than silently listing everything', function (): void {
+    actingAsPoster($this->viewer);
+
+    $this->getJson('/api/v1/posts?user_uuid=not-a-uuid', orgHeader($this->organization))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['user_uuid']);
+});
+
+// ---------------------------------------------------------------------------
 // Visibility — the privacy surface. Checked on both show and list.
 // ---------------------------------------------------------------------------
 
