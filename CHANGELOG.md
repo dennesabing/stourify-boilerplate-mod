@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Media uploads 403'd for everyone, so no photo could be attached to a post or a spot**
+  (STOURIFY-22). The platform resolves an attachable's permission as
+  `{host::permissionPrefix()}.media.{verb}` — `posts.media.create`, `spots.media.create` — and
+  permission discovery creates those rows, but nothing granted them: not the `explorer` role, not
+  any user. `POST /api/v1/media/upload-url` and `POST /api/v1/media/attach` therefore answered
+  `403 This action is unauthorized.` for every caller, which is what silently dropped PostCompose's
+  photos (STOURIFY-18) and blocked the spot photo path (STOURIFY-5). `posts.media.view`,
+  `posts.media.create`, `spots.media.view`, `spots.media.create` are now granted to `explorer` in
+  `StourifyModule::EXPLORER_PERMISSIONS`, alongside the discovered reaction permissions already
+  there — a seeder/sync path, so a fresh database has them. `update`/`delete` are deliberately not
+  granted: an uploader can already mutate their own media through `MediaPolicy`'s `uploaded_by_id`
+  ownership rule.
+
 ### Added
+
+- **`StourifyMediaPolicy`** — media rights on this module's photo hosts now follow *write* rights on
+  the host. A role grant is not scoped to a host instance, so `posts.media.create` on `explorer`
+  said "explorers may attach media to posts", not "only to their own", and
+  `App\Policies\MediaPolicy::create()` never consults the host's owner — an explorer could attach
+  photos to anyone's post or spot. The subclass overrides `create()` alone, requiring
+  `Gate::allows('update', $host)` when the host is a `Post` or a `Spot` and deferring to the parent
+  for every other host, and is registered for `App\Models\Media` in
+  `StourifyServiceProvider::policyMap()`. Delegating to the host's own `update` ability keeps the
+  rule in `PostPolicy`/`SpotPolicy`, moderator tier included, instead of forking a second copy of it.
+  Deliberately not fixed in `saas-boilerplate`: `AttachablePolicy` is generic platform code other
+  projects consume, and every attachable would inherit the new rule.
+
+- **`tests/Feature/MediaAttachmentApiTest.php`** — covers both endpoints against both hosts: an
+  explorer succeeds on what they authored, is forbidden on someone else's, and a moderator still
+  reaches both. Its users are provisioned from `StourifyModule::EXPLORER_PERMISSIONS` itself rather
+  than a hand-written permission list, so the suite fails if the role ever stops granting what the
+  media endpoints require — the gap that let this defect through in the first place.
 
 - **Media conversions on `Spot` and `Post`** — both now register `thumb` (400x400) and `medium`
   (1080x1080) conversions, scoped to the `attachments` collection (`HasOrganizationMedia`'s default

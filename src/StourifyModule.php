@@ -74,12 +74,24 @@ class StourifyModule implements Module
     /**
      * The permissions every explorer holds — the consumer role's grant.
      *
-     * The module's own `stourify.*` permissions plus the *discovered* reaction
-     * permissions on the Post and Review hosts (`posts.reactions.*`,
-     * `reviews.reactions.*`), so an explorer can like a post and mark a review
-     * helpful. Moderator-only abilities (`.manage`, `cities.manage`,
-     * `reports.manage`) are deliberately absent — those belong to a moderator
-     * role, not the default consumer.
+     * The module's own `stourify.*` permissions plus the *discovered* attachable
+     * permissions on the Post, Spot and Review hosts — reactions
+     * (`posts.reactions.*`, `reviews.reactions.*`) so an explorer can like a post
+     * and mark a review helpful, and media (`posts.media.*`, `spots.media.*`) so
+     * they can put photos on what they publish. Moderator-only abilities
+     * (`.manage`, `cities.manage`, `reports.manage`) are deliberately absent —
+     * those belong to a moderator role, not the default consumer.
+     *
+     * The media grants are `view` + `create` only. An uploader may already edit
+     * and remove their own media through MediaPolicy's `uploaded_by_id`
+     * ownership rule, so `posts.media.update` / `.delete` would buy nothing
+     * except reach over *other people's* files.
+     *
+     * A role grant is not scoped to a host instance — holding
+     * `posts.media.create` says "explorers may attach media to posts", not "only
+     * to their own". StourifyMediaPolicy supplies the missing half by requiring
+     * write rights on the host itself; neither piece is sufficient alone
+     * (STOURIFY-22).
      *
      * @var list<string>
      */
@@ -104,6 +116,10 @@ class StourifyModule implements Module
         'posts.reactions.create',
         'reviews.reactions.view',
         'reviews.reactions.create',
+        'posts.media.view',
+        'posts.media.create',
+        'spots.media.view',
+        'spots.media.create',
     ];
 
     /**
