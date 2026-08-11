@@ -28,6 +28,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Demo content
+    |--------------------------------------------------------------------------
+    |
+    | StourifyDemoContentSeeder fills the public organization with fixture
+    | spots so a dev box or a demo build is not an empty app. Every deploy runs
+    | module-published seeders (`php artisan modules:seed`), so the seeder must
+    | decide for itself whether it belongs in the target environment: on
+    | production, content is real and fixtures must never appear. Off in
+    | production unless STOURIFY_SEED_DEMO_CONTENT explicitly says otherwise.
+    |
+    */
+
+    'seed_demo_content' => (bool) env(
+        'STOURIFY_SEED_DEMO_CONTENT',
+        env('APP_ENV', 'production') !== 'production',
+    ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Discovery defaults
     |--------------------------------------------------------------------------
     */

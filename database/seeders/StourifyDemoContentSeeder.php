@@ -36,6 +36,11 @@ use Modules\Stourify\Models\Spot;
  *
  * Idempotent by contract, like every seeder in this module: `deploy.sh` runs
  * seeders on every deploy, so running this twice must change nothing.
+ *
+ * It is also environment-gated. `php artisan modules:seed` runs every seeder a
+ * module publishes and cannot special-case one, so the decision belongs here:
+ * on production the content is real and fixture spots must never appear.
+ * `config('stourify.seed_demo_content')` is off in production by default.
  */
 class StourifyDemoContentSeeder extends Seeder
 {
@@ -91,6 +96,14 @@ class StourifyDemoContentSeeder extends Seeder
 
     public function run(): void
     {
+        if (! config('stourify.seed_demo_content')) {
+            $this->command?->info(
+                'Demo content disabled for this environment (stourify.seed_demo_content) — skipping.',
+            );
+
+            return;
+        }
+
         $organization = $this->resolvePublicOrganization();
 
         if ($organization === null) {
