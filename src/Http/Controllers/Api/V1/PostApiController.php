@@ -66,6 +66,12 @@ class PostApiController extends Controller
                 'spot', fn (Builder $spot) => $spot->where('uuid', $filters['spot_uuid'])
             ))
             ->when(! empty($filters['mine']), fn (Builder $q) => $q->where('user_id', $user->id))
+            // Narrows an ALREADY-scoped query: `visibleTo()` above has run, so
+            // this cannot surface another explorer's unpublished or
+            // followers-only posts. It is a filter, never a permission.
+            ->when(! empty($filters['user_uuid']), fn (Builder $q) => $q->whereHas(
+                'user', fn (Builder $u) => $u->where('uuid', $filters['user_uuid'])
+            ))
             ->orderBy($filters['sort'] ?? 'published_at', $filters['direction'] ?? 'desc')
             ->paginate($perPage));
 

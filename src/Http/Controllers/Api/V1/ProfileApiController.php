@@ -59,7 +59,7 @@ class ProfileApiController extends Controller
         }
 
         return $this->success(
-            new ProfileResource($this->withCounts($profile->load(['user', 'homeCity']))),
+            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user', 'homeCity'])))),
         );
     }
 
@@ -75,7 +75,7 @@ class ProfileApiController extends Controller
         $this->authorize('view', $profile);
 
         return $this->success(
-            new ProfileResource($this->withCounts($profile->load(['user', 'homeCity']))),
+            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user', 'homeCity'])))),
         );
     }
 
@@ -111,7 +111,7 @@ class ProfileApiController extends Controller
         }
 
         return $this->success(
-            new ProfileResource($this->withCounts($profile->load(['user', 'homeCity']))),
+            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user', 'homeCity'])))),
             $status,
             $message,
         );
@@ -162,6 +162,35 @@ class ProfileApiController extends Controller
             ->where('follower_id', $userId)
             ->where('status', FollowStatus::Active->value)
             ->count();
+
+        return $profile;
+    }
+
+    /**
+     * Attach the caller's own outgoing edge to this profile's subject.
+     *
+     * One indexed lookup on the `(follower_id, followee_id)` unique index, and
+     * skipped entirely when the caller is the subject — you cannot follow
+     * yourself, so the query would always be empty.
+     *
+     * Deliberately the caller's OUTGOING edge only. The reverse edge ("they
+     * follow me") is a different fact and belongs to the followers list; a
+     * Follow button that read it would offer to unfollow someone the caller
+     * never followed.
+     */
+    private function withViewerState(ExplorerProfile $profile): ExplorerProfile
+    {
+        $viewer = auth()->user();
+
+        $edge = $viewer === null || $viewer->id === $profile->user_id
+            ? null
+            : Follow::query()
+                ->where('follower_id', $viewer->id)
+                ->where('followee_id', $profile->user_id)
+                ->first();
+
+        $profile->viewer_follow_status = $edge?->status->value;
+        $profile->viewer_follow_uuid = $edge?->uuid;
 
         return $profile;
     }
