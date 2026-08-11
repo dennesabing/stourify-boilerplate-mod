@@ -8,6 +8,7 @@ use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Enums\PostVisibility;
+use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\Follow;
 use Modules\Stourify\Models\Post;
 use Spatie\Permission\Exceptions\PermissionDoesNotExist;
@@ -49,6 +50,15 @@ class PostPolicy
 
     public function view(User $user, Post $post): bool
     {
+        // Checked before the moderator bypass and before ownership, because a
+        // block is symmetric and unconditional: neither party reaches the
+        // other's posts, and there is no role that makes it not so. The author
+        // check below can never fire against a blocked pair anyway — nobody
+        // blocks themselves.
+        if (Block::isHiddenFrom($user, $post->user_id)) {
+            return false;
+        }
+
         if ($this->isModerator($user) || $user->id === $post->user_id) {
             return true;
         }

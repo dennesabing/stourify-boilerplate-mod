@@ -20,6 +20,7 @@ use Modules\Stourify\Http\Requests\SpotNearbyRequest;
 use Modules\Stourify\Http\Requests\SpotStoreRequest;
 use Modules\Stourify\Http\Requests\SpotUpdateRequest;
 use Modules\Stourify\Http\Resources\SpotResource;
+use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Policies\SpotPolicy;
@@ -104,15 +105,22 @@ class SpotApiController extends Controller
         $radiusKm = (float) ($request->validated('radius') ?? config('stourify.discovery.default_radius_km', 5.0));
         $perPage = (int) ($request->validated('per_page') ?? 25);
 
+        // Keyed per viewer since blocks landed. This result used to be shared
+        // across everyone in the org, which is exactly what made it cheap —
+        // but a block filter is per viewer, and a shared entry would have
+        // served one explorer's filtered map to the next caller. Correctness
+        // over cardinality; `spots:index` has always been keyed this way.
         $cacheKey = sprintf(
-            'api:stourify:spots:nearby:org:%d:%s',
+            'api:stourify:spots:nearby:org:%d:user:%d:%s',
             app(OrganizationContext::class)->id() ?? 0,
+            $request->user()->id,
             hash('sha256', json_encode([$latitude, $longitude, $radiusKm, $perPage, $request->validated('page')]) ?: ''),
         );
 
         $spots = Spot::getCachedList($cacheKey, fn (): LengthAwarePaginator => Spot::query()
             ->published()
             ->nearby($latitude, $longitude, $radiusKm)
+            ->whereNotIn('user_id', Block::hiddenUserIdsFor($request->user()))
             ->with(['city', 'user', 'media'])
             ->paginate($perPage));
 
@@ -176,11 +184,20 @@ class SpotApiController extends Controller
      * draft locally and publishes it on reconnect, so an author must be able
      * to list a spot nobody else can.
      *
+     * Blocks apply first and to everyone, moderators included: a block is a
+     * personal decision about whose contributions this viewer sees, which is
+     * a different question from the draft visibility the rest of this method
+     * settles. The spot itself stays discoverable for every other explorer —
+     * the filter is per viewer, so blocking a contributor never removes a real
+     * place from the map for anyone else.
+     *
      * @param  Builder<Spot>  $query
      * @return Builder<Spot>
      */
     private function visibleTo(Builder $query, User $user): Builder
     {
+        $query->whereNotIn('user_id', Block::hiddenUserIdsFor($user));
+
         if ($user->can('viewAnyDraft', Spot::class)) {
             return $query;
         }

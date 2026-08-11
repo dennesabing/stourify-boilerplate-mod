@@ -14,11 +14,13 @@ use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Enums\SpotStatus;
 use Modules\Stourify\Http\Requests\ProfileUpdateRequest;
 use Modules\Stourify\Http\Resources\ProfileResource;
+use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Follow;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Policies\ExplorerProfilePolicy;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 /**
  * Explorer profiles — read/update, username uniqueness, home city, interests.
@@ -66,6 +68,8 @@ class ProfileApiController extends Controller
      */
     public function show(User $user): JsonResponse
     {
+        $this->assertNoBlockBetween($user);
+
         $profile = ExplorerProfile::query()->where('user_id', $user->id)->firstOrFail();
 
         $this->authorize('view', $profile);
@@ -111,6 +115,26 @@ class ProfileApiController extends Controller
             $status,
             $message,
         );
+    }
+
+    /**
+     * Refuse the header when a block stands between the caller and its subject.
+     *
+     * One message, one status, thrown from one place — deliberately identical
+     * whichever side of the block the caller is on. If the blocked party got a
+     * different response from the blocker, the block would announce itself,
+     * and the whole point is that they are never told. The wording names
+     * neither party nor the word "block", so a 403 here is indistinguishable
+     * from any other unavailable profile.
+     *
+     * Checked ahead of `firstOrFail()` so a blocked pair cannot use the
+     * 403-vs-404 difference to learn whether the other has a profile at all.
+     */
+    private function assertNoBlockBetween(User $subject): void
+    {
+        if (Block::isHiddenFrom(auth()->user(), $subject->id)) {
+            throw new AccessDeniedHttpException('This profile is not available.');
+        }
     }
 
     /**

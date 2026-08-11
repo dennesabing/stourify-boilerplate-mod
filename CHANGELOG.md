@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Blocking — an explorer can now block another, and it holds on both sides of the graph**
+  (STOURIFY-36). New `sto_blocks` table and `Block` model, and a deliberately narrow API at
+  `/api/v1/blocks`: list your own blocks, add one (idempotent, so a double-tap is not an error),
+  lift one. The row is directed — only the blocker may lift it — but its *effect* is symmetric, and
+  that is the whole design. Everything downstream asks the undirected question through
+  `Block::hiddenUserIdsFor()` / `isHiddenFrom()`, so no caller has to remember which way round the
+  row was written. A block enforced in one direction only is not a block: the blocked party would
+  go on reading, searching and following the person who blocked them.
+
+  Enforced at six places, which is what it takes for the feature to be real rather than cosmetic:
+  `Post::scopeVisibleTo()` (the home feed and the post index share it), `PostPolicy::view()` as its
+  per-record twin, `SpotApiController::visibleTo()` plus the nearby query, both the spots and the
+  people sections of `/discover/search`, `ProfileApiController::show()`, and
+  `FollowApiController::store()`.
+
+  Creating a block **deletes the follow edges between the two in both directions**, pending requests
+  included. Leaving the reverse edge intact would keep the blocked party inside the blocker's
+  followers-only audience and keep the blocker on their following list. Lifting a block does not
+  restore them — they were hard-deleted, not suspended, and re-creating them would silently
+  re-follow on someone's behalf. The removals go one at a time through `CrudService` rather than as
+  a mass delete, for the reason STOURIFY-32 documents below: a mass delete skips model events, so
+  `SyncTombstoneObserver` never fires and an offline client keeps the edge forever.
+
+  **The blocked party is never told**, which extends the rule reports already follow — a report is
+  anonymous to the reported party. There is no endpoint that answers "who has blocked me": the index
+  is constrained to the caller's own rows, `BlockResource` never renders a blocker, and `BlockPolicy`
+  gives the blocked party no ability on the resource at all. The profile header's refusal carries one
+  neutral message thrown from one place, identical in both directions and checked ahead of the
+  `firstOrFail()`, so neither the wording nor a 403-vs-404 difference reveals which side of the block
+  the caller is on.
+
+  No new permission. Blocking rides on `stourify.follows.manage`, which every explorer already holds
+  — blocking *is* an operation on the follow graph, and the module already publishes one participant
+  capability for that graph rather than a create/update/delete triple. A `stourify.blocks.manage`
+  granted to every explorer without exception would carry no information.
+
 - **An explorer's content is withdrawn the moment they delete their account** (STOURIFY-32).
   `RemoveExplorerContentOnUserDeleted` listens for the platform's new `UserDeleted` and soft-deletes
   the departing explorer's spots, posts and reviews, and hard-deletes their wishlist items, explorer

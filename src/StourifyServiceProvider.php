@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Modules\Stourify\Listeners\JoinPublicOrganizationAsExplorer;
 use Modules\Stourify\Listeners\RemoveExplorerContentOnUserDeleted;
+use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Follow;
@@ -25,6 +26,7 @@ use Modules\Stourify\Models\WishlistItem;
 use Modules\Stourify\Observers\ReactionCountObserver;
 use Modules\Stourify\Observers\ReviewObserver;
 use Modules\Stourify\Observers\SyncTombstoneObserver;
+use Modules\Stourify\Policies\BlockPolicy;
 use Modules\Stourify\Policies\ExplorerProfilePolicy;
 use Modules\Stourify\Policies\FollowPolicy;
 use Modules\Stourify\Policies\PostPolicy;
@@ -59,6 +61,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         Review::class,
         City::class,
         Follow::class,
+        Block::class,
         WishlistItem::class,
         ExplorerProfile::class,
         Report::class,
@@ -146,6 +149,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
             WishlistItem::class => WishlistItemPolicy::class,
             ExplorerProfile::class => ExplorerProfilePolicy::class,
             Report::class => ReportPolicy::class,
+            Block::class => BlockPolicy::class,
             Media::class => StourifyMediaPolicy::class,
         ];
     }

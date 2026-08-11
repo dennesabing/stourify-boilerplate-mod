@@ -13,6 +13,7 @@ use Modules\Stourify\Http\Requests\SearchRequest;
 use Modules\Stourify\Http\Resources\CityResource;
 use Modules\Stourify\Http\Resources\PersonResource;
 use Modules\Stourify\Http\Resources\SpotResource;
+use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Spot;
@@ -85,7 +86,10 @@ class SearchApiController extends Controller
     private function spots(string $query): \Laravel\Scout\Builder
     {
         return Spot::search($query)
-            ->query(fn (Builder $builder) => $builder->published()->with(['city', 'user']));
+            ->query(fn (Builder $builder) => $builder
+                ->published()
+                ->whereNotIn('user_id', $this->hidden())
+                ->with(['city', 'user']));
     }
 
     /**
@@ -104,6 +108,23 @@ class SearchApiController extends Controller
     private function people(string $query): \Laravel\Scout\Builder
     {
         return ExplorerProfile::search($query)
-            ->query(fn (Builder $builder) => $builder->with(['user']));
+            ->query(fn (Builder $builder) => $builder
+                ->whereNotIn('user_id', $this->hidden())
+                ->with(['user']));
+    }
+
+    /**
+     * The users this searcher must not see, and who must not see them.
+     *
+     * Resolved once per request and handed to both sections. Search is the
+     * surface where a missed block is most visible — a blocked account that
+     * still turns up under its own handle makes the block look broken, and
+     * finding someone is the first step to reaching them again.
+     *
+     * @return list<int>
+     */
+    private function hidden(): array
+    {
+        return Block::hiddenUserIdsFor(request()->user());
     }
 }

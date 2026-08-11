@@ -16,6 +16,7 @@ use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Http\Requests\FollowIndexRequest;
 use Modules\Stourify\Http\Requests\FollowStoreRequest;
 use Modules\Stourify\Http\Resources\FollowResource;
+use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\Follow;
 use Modules\Stourify\Policies\FollowPolicy;
 use Modules\Stourify\Support\AttachesExplorerProfiles;
@@ -128,6 +129,15 @@ class FollowApiController extends Controller
     public function store(FollowStoreRequest $request): JsonResponse
     {
         $targetId = (int) User::query()->where('uuid', $request->validated('user_uuid'))->value('id');
+
+        // A block forbids a new edge from either side. Refused here rather
+        // than in FollowStoreRequest so the response is a flat 403 with the
+        // same neutral wording the profile header uses — a 422 naming the
+        // field would tell the blocked party that this particular person is
+        // the reason, which they are never told.
+        if (Block::isHiddenFrom($request->user(), $targetId)) {
+            throw new AccessDeniedHttpException('This explorer is not available.');
+        }
 
         // Derived from the target's privacy setting, never from the payload.
         $isPrivate = $this->isPrivateAccount($targetId);
