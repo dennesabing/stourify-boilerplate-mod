@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Database\Seeders\StourifyExplorerBackfillSeeder;
 use Modules\Stourify\Listeners\JoinPublicOrganizationAsExplorer;
+use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\StourifyModule;
 use Spatie\Permission\Models\Permission;
@@ -55,6 +56,94 @@ test('registering enrols the user as an explorer of the public org', function ()
 
     setPermissionsTeamId($this->publicOrg->id);
     expect($user->fresh()->hasRole(JoinPublicOrganizationAsExplorer::ROLE))->toBeTrue();
+});
+
+// ---------------------------------------------------------------------------
+// Registration also creates the explorer profile (STOURIFY-82)
+// ---------------------------------------------------------------------------
+
+test('registering creates the explorer profile', function (): void {
+    $user = app(UserService::class)->createUser([
+        'name' => 'Grace Wanderer',
+        'email' => 'grace-profile@example.com',
+        'password' => 'password',
+    ], 'registration');
+
+    $profile = ExplorerProfile::query()->withoutGlobalScopes()->where('user_id', $user->id)->first();
+
+    expect($profile)->not->toBeNull()
+        ->and($profile->organization_id)->toBe($this->publicOrg->id)
+        // Every rule the column and ProfileUpdateRequest enforce, at once —
+        // a handle that fails any of them is one the user can never edit.
+        ->and($profile->username)->toMatch('/^[a-z0-9_.]{3,30}$/');
+});
+
+test('two explorers registering under the same name get different handles', function (): void {
+    foreach (['a@example.com', 'b@example.com'] as $email) {
+        app(UserService::class)->createUser([
+            'name' => 'Grace Wanderer',
+            'email' => $email,
+            'password' => 'password',
+        ], 'registration');
+    }
+
+    $handles = ExplorerProfile::query()->withoutGlobalScopes()->pluck('username');
+
+    expect($handles)->toHaveCount(2)
+        ->and($handles->unique())->toHaveCount(2);
+});
+
+test('a name with nothing usable in it still registers', function (): void {
+    $user = app(UserService::class)->createUser([
+        'name' => 'のぞみ',
+        'email' => 'nozomi@example.com',
+        'password' => 'password',
+    ], 'registration');
+
+    $profile = ExplorerProfile::query()->withoutGlobalScopes()->where('user_id', $user->id)->first();
+
+    expect($profile)->not->toBeNull()
+        ->and($profile->username)->toMatch('/^[a-z0-9_.]{3,30}$/');
+});
+
+test('a second enrolment neither duplicates the profile nor changes the handle', function (): void {
+    $user = User::factory()->create(['current_organization_id' => null]);
+
+    JoinPublicOrganizationAsExplorer::enrol($user, $this->publicOrg);
+    $handle = ExplorerProfile::query()->withoutGlobalScopes()->where('user_id', $user->id)->value('username');
+
+    JoinPublicOrganizationAsExplorer::enrol($user, $this->publicOrg);
+
+    expect(ExplorerProfile::query()->withoutGlobalScopes()->where('user_id', $user->id)->count())->toBe(1)
+        ->and(ExplorerProfile::query()->withoutGlobalScopes()->where('user_id', $user->id)->value('username'))
+        ->toBe($handle);
+});
+
+/**
+ * The endpoint the Profile tab actually reads. It answers `data: null` for a
+ * user with no profile, which is what the device saw — so asserting the row
+ * exists is not enough; the screen's own read has to come back with something.
+ */
+test('GET /profile answers with a profile straight after registering', function (): void {
+    $user = app(UserService::class)->createUser([
+        'name' => 'Grace Wanderer',
+        'email' => 'grace-me@example.com',
+        'password' => 'password',
+    ], 'registration');
+
+    Sanctum::actingAs($user->fresh());
+
+    $this->getJson('/api/v1/profile', ['X-Organization-Id' => $this->publicOrg->uuid])
+        ->assertOk()
+        ->assertJsonPath('data.viewer.is_self', true)
+        ->assertJsonStructure(['data' => ['uuid', 'username', 'counts', 'viewer']]);
+});
+
+test('a seeder-created user gets no profile either (only registration does)', function (): void {
+    $seeded = User::factory()->create();
+
+    expect(ExplorerProfile::query()->withoutGlobalScopes()->where('user_id', $seeded->id)->exists())
+        ->toBeFalse();
 });
 
 test('a seeder-created user is not auto-enrolled (only registration is)', function (): void {
