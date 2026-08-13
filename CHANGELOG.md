@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Registering now creates the explorer profile, instead of leaving the account without one.**
+  (STOURIFY-82) Signing up created a user and nothing else. The Stourify half of someone's identity —
+  handle, bio, home city, interests — lives in `sto_explorer_profiles`, and no path on registration
+  ever wrote that row: 24 of the 31 accounts on the dev database had none, and a brand-new user
+  tapping their own Profile tab was told they had not set up a profile. It went unnoticed because
+  every seeder and test fixture builds one explicitly, so no automated path ever registered fresh and
+  then looked.
+
+  It is now created in `JoinPublicOrganizationAsExplorer::enrol()`, beside the organization
+  membership it belongs with — the same shared method `StourifyExplorerBackfillSeeder` calls, so the
+  two cannot drift. Since the account has not been asked what it wants to be called yet, a new
+  `Support/ExplorerUsernameGenerator` derives a starter handle from the display name and makes it
+  free, the way a hotel gives you a room number on arrival; Edit Profile changes it. The generator
+  satisfies all four rules the handle has to meet at once — 3 to 30 characters, `^[a-z0-9_.]+$`, and
+  unique across the whole table — because a handle that fails any of them is a profile whose owner is
+  locked out of their own edit form.
+
+  Nothing in `saas-boilerplate` changed: the event this hangs off, `UserRegistered`, was already
+  published and already listened to. Seeded and factory users are untouched, because that event fires
+  only for the `registration` source.
+
+  **Existing profile-less accounts are not backfilled by this change** — it is forward-only, and a
+  write across records that already exist is a separate decision on its own card.
+
 ### Changed
 
 - **The privacy policy's photo-metadata paragraph now describes what the app does, not what it used
