@@ -5,7 +5,9 @@ declare(strict_types=1);
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\FollowStatus;
 use Modules\Stourify\Enums\PostVisibility;
@@ -82,7 +84,7 @@ function follow(User $follower, User $followee, mixed $organization, FollowStatu
 // CRUD and publishing
 // ---------------------------------------------------------------------------
 
-test('an explorer creates an unpublished post by default', function (): void {
+test('an explorer creates an unpublished, private post by default', function (): void {
     actingAsPoster($this->author);
 
     $this->postJson('/api/v1/posts', [
@@ -92,7 +94,46 @@ test('an explorer creates an unpublished post by default', function (): void {
         ->assertCreated()
         ->assertJsonPath('data.is_published', false)
         ->assertJsonPath('data.published_at', null)
-        ->assertJsonPath('data.visibility', PostVisibility::Public->value);
+        ->assertJsonPath('data.visibility', PostVisibility::Private->value);
+});
+
+/**
+ * The closed default must not become a ceiling. A caller who names a
+ * visibility still gets exactly what they asked for -- the new default only
+ * answers the question nobody asked (STOURIFY-105).
+ */
+test('an explicit visibility still wins over the private default', function (string $visibility): void {
+    actingAsPoster($this->author);
+
+    $this->postJson('/api/v1/posts', [
+        'spot_uuid' => $this->spot->uuid,
+        'visibility' => $visibility,
+    ], orgHeader($this->organization))
+        ->assertCreated()
+        ->assertJsonPath('data.visibility', $visibility);
+})->with([
+    PostVisibility::Public->value,
+    PostVisibility::Followers->value,
+    PostVisibility::Private->value,
+]);
+
+/**
+ * The last line of defence: an insert that names no visibility at all -- not
+ * through the API, not through the model -- still lands private, because the
+ * column itself says so (STOURIFY-105).
+ */
+test('the visibility column itself defaults to private', function (): void {
+    $id = DB::table('sto_posts')->insertGetId([
+        'uuid' => (string) Str::uuid(),
+        'organization_id' => $this->organization->id,
+        'user_id' => $this->author->id,
+        'spot_id' => $this->spot->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    expect(DB::table('sto_posts')->where('id', $id)->value('visibility'))
+        ->toBe(PostVisibility::Private->value);
 });
 
 test('a post can be created already published', function (): void {
