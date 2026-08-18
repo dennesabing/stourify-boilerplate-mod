@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A new post starts Private instead of Public** (STOURIFY-105). Creating a post used to make it
+  visible to everyone unless the author said otherwise — like a notebook page pinned to a public
+  noticeboard the moment you start writing it. Now a post nobody assigned a visibility to is
+  private, and the author chooses to share it.
+
+  Two places said "public" and both moved: `PostApiController::store()`'s fallback for a request
+  that omits `visibility`, and the `sto_posts.visibility` column's own default, changed by a new
+  migration. An explicit `visibility` in the request still wins in every case.
+
+  **No post that already exists was touched.** The migration changes the column's default and
+  reads and writes zero rows, so anything anyone has already shared stays exactly as they left it.
+
 ### Fixed
 
 - **Registering now creates the explorer profile, instead of leaving the account without one.**

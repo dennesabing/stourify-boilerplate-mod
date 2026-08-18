@@ -106,7 +106,12 @@ class PostApiController extends Controller
             'spot_id' => $this->resolveSpotId($data),
             'user_id' => $request->user()->id,
             'caption' => $data['caption'] ?? null,
-            'visibility' => $data['visibility'] ?? PostVisibility::Public->value,
+            // A post nobody assigned a visibility to starts PRIVATE, not public
+            // (STOURIFY-105). The safe direction for a privacy default is the
+            // closed one: an author who says nothing shares nothing. An explicit
+            // `visibility` in the request still wins — this only answers the
+            // question the caller did not ask.
+            'visibility' => $data['visibility'] ?? PostVisibility::Private->value,
             // The server owns this clock, never the client — see PostStoreRequest.
             'published_at' => ($data['publish'] ?? false) ? now() : null,
         ]);
