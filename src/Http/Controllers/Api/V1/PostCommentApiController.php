@@ -26,9 +26,12 @@ use Modules\Stourify\Models\Post;
  * checked before either endpoint touches a comment, so a stranger who
  * cannot see a private or unpublished post cannot read or write its
  * comments either, regardless of what permissions they hold on comments in
- * the abstract. `CommentPolicy` (via CrudService) still enforces its own
- * `posts.comments.*` permission on top of that — the two checks are
- * independent layers, not a substitute for one another.
+ * the abstract. `CommentPolicy` still enforces its own `posts.comments.*`
+ * permission on top of that — explicitly on `index`, and through
+ * `CrudService` on `store`. The two checks are independent layers, not a
+ * substitute for one another: somebody who can read the post but holds no
+ * comment permission is refused, and so is somebody with every comment
+ * permission who cannot see the post.
  */
 class PostCommentApiController extends Controller
 {
@@ -36,7 +39,16 @@ class PostCommentApiController extends Controller
 
     public function index(Request $request, Post $post): CommentResourceCollection
     {
+        // Two independent locks, in the order a reader would expect: may you see
+        // the post, and may you read comments on a post. Until STOURIFY-154 only
+        // the first was here, which made `posts.comments.view` a permission no
+        // read path ever consulted — and left this endpoint asking LESS than
+        // `CommentPolicy::view()` asks for a single one of the comments it
+        // returns. `SpotAboutCommentApiController::index` has always made both
+        // checks; this is the pair being made consistent, in the same change
+        // that grants the permission to the explorer role.
         $this->authorize('view', $post);
+        $this->authorize('viewAny', [Comment::class, $post]);
 
         $page = (int) $request->input('page', 1);
         $cacheKey = sprintf('api:stourify:posts:%d:comments:index:page:%d', $post->id, $page);

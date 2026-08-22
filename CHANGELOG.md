@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A test that asks whether a real explorer can comment, rather than whether a permission works**
+  (STOURIFY-154). `tests/Feature/ExplorerPostCommentPermissionTest.php` builds its users from the
+  `explorer` role exactly as `StourifyModule` publishes it and never names a permission itself.
+
+  This matters more than a fourth test file usually would. Every other comment test in this module
+  hands its users a written-out list — `posts.comments.view`, `posts.comments.create` — and then
+  checks the controller and the policy behave correctly for somebody holding them. Those tests are
+  right, and no arrangement of them could ever have noticed that the only role real users have held
+  neither name. It is the difference between checking that a key turns a lock and checking that
+  anybody was ever given the key. The suite stayed green for months while every real comment was
+  refused.
+
 - **Spot About — you can now reply to somebody's note instead of pinning a second one beside it**
   (STOURIFY-146). Each About entry gets its own comment thread:
   `GET|POST /api/v1/spot-abouts/{about}/comments`, addressed by the entry's UUID, and a
@@ -90,6 +102,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reads and writes zero rows, so anything anyone has already shared stays exactly as they left it.
 
 ### Fixed
+
+- **Nobody could comment on a post: the `explorer` role held no `posts.comments.*` permission**
+  (STOURIFY-154). Every ordinary user who typed a comment on a post and pressed send got
+  **403** — `Authorization failed for 'create' operation on [Comment]` — from a screen that offered
+  a composer regardless. A shop with a counter, an assistant and a till, and no licence to sell
+  anything.
+
+  The permission itself was never the problem. `AttachablePolicy` builds a comment permission out of
+  the thing being commented on — `{host prefix}.comments.{verb}`, so `posts.comments.create` — and
+  `PermissionDiscoveryService` mints exactly that row from `Post`'s `HasComments` trait, and
+  `permissions:sync` writes it. `StourifyModule::EXPLORER_PERMISSIONS` simply never listed it. The
+  lock existed, the key existed, and nobody was given the key. `posts.comments.view` and
+  `posts.comments.create` are now granted to `explorer`.
+
+  This is the same defect STOURIFY-22 fixed for media one attachable over, and the grant is
+  deliberately the same narrow pair. `update` and `delete` are **not** granted: `CommentPolicy`
+  already lets people edit and remove their own comment through its ownership rule, so those two
+  names would buy nothing except reach over *other people's* replies, which is a moderator's ability.
+
+  **Existing databases need no backfill.** `deploy.sh` already runs `permissions:sync` and then
+  `RolesAndPermissionsSeeder`, and that seeder re-syncs each role's permissions from the module
+  definition in full and then copies them down to each user's own grants. Deploying is all this takes.
+
+- **A post's comment thread was readable by anyone who could see the post** (STOURIFY-154).
+  `PostCommentApiController::index` checked only that you could view the post, so the endpoint
+  returning fifteen comments asked *less* than `CommentPolicy` asks for a single one of them, and
+  `posts.comments.view` was a permission no read path ever consulted. It now also authorizes
+  `viewAny` on comments, which is what `SpotAboutCommentApiController::index` has always done — the
+  card asked for the asymmetry to be settled, and the stricter of the two is the one with an argument
+  behind it. No caller loses access: the explorer role is granted the permission in the same change,
+  and the override tier passes before any permission is read.
 
 - **A reply on a post's or an About entry's thread never appeared in the app** (STOURIFY-152). The
   cause is in `saas-boilerplate` and is fixed there; what changed here is the door it comes through.
