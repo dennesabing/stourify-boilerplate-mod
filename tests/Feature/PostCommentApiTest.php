@@ -142,21 +142,58 @@ test('a stranger who cannot view the post is forbidden from commenting on it', f
     ]);
 });
 
-test('a reply comes back attached to its parent', function (): void {
+/**
+ * The whole round trip, using only what a client can see.
+ *
+ * The old version of this test read the parent's uuid out of the response and
+ * then went to the DATABASE for the numeric id it actually had to send, because
+ * no response from this API has ever carried one. It passed while describing a
+ * request no phone could make (STOURIFY-152). Now the uuid the first response
+ * hands back is the uuid the second request sends, with nothing in between.
+ */
+test('a reply is created by the parent uuid and comes back carrying it', function (): void {
     actingAsCommenter($this->commenter);
 
     $parentUuid = $this->postJson("/api/v1/posts/{$this->post->uuid}/comments", [
         'body' => 'Where is this?',
     ], orgHeader($this->organization))->assertCreated()->json('data.id');
 
-    $parentId = Comment::query()->where('uuid', $parentUuid)->value('id');
-
     $response = $this->postJson("/api/v1/posts/{$this->post->uuid}/comments", [
         'body' => 'At the summit lookout.',
-        'parent_id' => $parentId,
+        'parent_id' => $parentUuid,
     ], orgHeader($this->organization))->assertCreated();
 
-    expect($response->json('data.parent_id'))->toBe($parentId);
+    expect($response->json('data.parent_id'))->toBe($parentUuid);
+
+    $reply = Comment::query()->where('uuid', $response->json('data.id'))->firstOrFail();
+    expect($reply->parent_id)->toBe(Comment::query()->where('uuid', $parentUuid)->value('id'));
+});
+
+/**
+ * The listing has to let the app join a reply to its parent without leaving the
+ * payload — that join is exactly what draws the indentation.
+ */
+test('a listed reply points at a parent that is in the same payload', function (): void {
+    actingAsCommenter($this->commenter);
+
+    $parentUuid = $this->postJson("/api/v1/posts/{$this->post->uuid}/comments", [
+        'body' => 'Where is this?',
+    ], orgHeader($this->organization))->assertCreated()->json('data.id');
+
+    $this->postJson("/api/v1/posts/{$this->post->uuid}/comments", [
+        'body' => 'At the summit lookout.',
+        'parent_id' => $parentUuid,
+    ], orgHeader($this->organization))->assertCreated();
+
+    $rows = $this->getJson("/api/v1/posts/{$this->post->uuid}/comments", orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    $ids = array_column($rows, 'id');
+    $parentIds = array_values(array_filter(array_column($rows, 'parent_id')));
+
+    expect($parentIds)->toBe([$parentUuid])
+        ->and($ids)->toContain($parentUuid);
 });
 
 test('a parent_id belonging to another post is rejected', function (): void {
@@ -178,6 +215,6 @@ test('a parent_id belonging to another post is rejected', function (): void {
 
     $this->postJson("/api/v1/posts/{$this->post->uuid}/comments", [
         'body' => 'Mismatched thread.',
-        'parent_id' => $foreignParent->id,
+        'parent_id' => $foreignParent->uuid,
     ], orgHeader($this->organization))->assertUnprocessable();
 });

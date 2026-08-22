@@ -91,6 +91,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A reply on a post's or an About entry's thread never appeared in the app** (STOURIFY-152). The
+  cause is in `saas-boilerplate` and is fixed there; what changed here is the door it comes through.
+  `PostCommentStoreRequest` and `SpotAboutCommentStoreRequest` now take `parent_id` as the parent
+  comment's **UUID** rather than its numeric database id — still scoped to the same host, with the
+  same message when a parent is borrowed from another thread — and both controllers eager-load
+  `parent:id,uuid` so reading the parent's UUID does not cost a query per comment.
+
+  **Breaking for any client that sends `parent_id` as an integer.** No response from these
+  endpoints has ever carried a numeric comment id, so no client could have obtained one; that was
+  the bug.
+
 - **Registering now creates the explorer profile, instead of leaving the account without one.**
   (STOURIFY-82) Signing up created a user and nothing else. The Stourify half of someone's identity —
   handle, bio, home city, interests — lives in `sto_explorer_profiles`, and no path on registration

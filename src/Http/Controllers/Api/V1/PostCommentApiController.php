@@ -44,7 +44,10 @@ class PostCommentApiController extends Controller
         $comments = Comment::getCachedList(
             $cacheKey,
             fn (): LengthAwarePaginator => Comment::query()
-                ->with('user')
+                // `parent` is loaded for its UUID alone: `CommentResource`
+                // reports a reply's parent by UUID, and reading that lazily
+                // would fire one extra query per row on every page.
+                ->with(['user', 'parent:id,uuid'])
                 ->where('commentable_type', $this->commentableType())
                 ->where('commentable_id', $post->getKey())
                 ->latest()
@@ -71,7 +74,7 @@ class PostCommentApiController extends Controller
         ], ['commentable' => $post]);
 
         return $this->success(
-            new CommentResource($comment->load('user')),
+            new CommentResource($comment->load(['user', 'parent:id,uuid'])),
             201,
             'Comment created successfully.',
         );
