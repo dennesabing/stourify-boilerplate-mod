@@ -103,6 +103,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A comment thread on a post or an About entry asked the database two extra questions per
+  comment** (STOURIFY-153). Both comment controllers now eager-load `commentable` and
+  `visibilityRules` alongside the `parent` that STOURIFY-152 added, inside the cached closure so the
+  relations are stored with the paginator rather than fetched only on a cache miss. The fix itself
+  is in `saas-boilerplate`'s `CommentResource`/`CommentPolicy` pair; these two adapters are the
+  read paths that have to load what it reads. Measured: a seven-comment About thread went from 29
+  queries to 16, flat as the thread grows.
+
+  Each endpoint gains two guards — the whole request under `Model::preventLazyLoading()`, and a
+  count assertion comparing a long thread against a short one — both acting as an ordinary
+  commenter, because `AttachablePolicy::view()` returns early for an override role and a guard
+  written under an admin's identity never reaches the reads it exists to catch.
+
 - **Nobody could comment on a post: the `explorer` role held no `posts.comments.*` permission**
   (STOURIFY-154). Every ordinary user who typed a comment on a post and pressed send got
   **403** — `Authorization failed for 'create' operation on [Comment]` — from a screen that offered

@@ -56,10 +56,19 @@ class PostCommentApiController extends Controller
         $comments = Comment::getCachedList(
             $cacheKey,
             fn (): LengthAwarePaginator => Comment::query()
-                // `parent` is loaded for its UUID alone: `CommentResource`
-                // reports a reply's parent by UUID, and reading that lazily
-                // would fire one extra query per row on every page.
-                ->with(['user', 'parent:id,uuid'])
+                // Everything the response reads, fetched for the whole page
+                // at once. `parent` is here for its UUID alone, because
+                // `CommentResource` reports a reply's parent by UUID
+                // (STOURIFY-152). `commentable` and `visibilityRules` are here
+                // because the resource's `can` block authorizes every row
+                // through `CommentPolicy`, which reads the comment's host and
+                // then asks whether the comment is visible to this user — two
+                // more queries per comment when they are not loaded up front
+                // (STOURIFY-153). They are loaded INSIDE the cached closure so
+                // the relations are stored with the paginator; loading them
+                // after the fact would work on a cache miss and be missing on
+                // every hit.
+                ->with(['user', 'parent:id,uuid', 'commentable', 'visibilityRules'])
                 ->where('commentable_type', $this->commentableType())
                 ->where('commentable_id', $post->getKey())
                 ->latest()
@@ -86,7 +95,7 @@ class PostCommentApiController extends Controller
         ], ['commentable' => $post]);
 
         return $this->success(
-            new CommentResource($comment->load(['user', 'parent:id,uuid'])),
+            new CommentResource($comment->load(['user', 'parent:id,uuid', 'commentable', 'visibilityRules'])),
             201,
             'Comment created successfully.',
         );
