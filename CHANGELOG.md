@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Spot About — you can now reply to somebody's note instead of pinning a second one beside it**
+  (STOURIFY-146). Each About entry gets its own comment thread:
+  `GET|POST /api/v1/spot-abouts/{about}/comments`, addressed by the entry's UUID, and a
+  `comments_count` on the entry's list and show responses.
+
+  New: `SpotAboutCommentApiController`, `SpotAboutCommentStoreRequest`, the two routes, and the
+  `spot_abouts.comments.view` / `spot_abouts.comments.create` grants on the `explorer` role. The
+  comments themselves are the platform's — the same shared table, service and policy every other
+  commentable model uses. Removing one needs no route here: the platform's
+  `DELETE /api/v1/comments/{uuid}` is already addressed by a UUID, so there is nothing to translate.
+
+  Two things a reader should not have to reverse-engineer:
+
+  - **Why there is a controller at all.** The platform's generic comment surface wants the row's
+    numeric database id, and no Stourify response contains one — this module addresses everything by
+    UUID. So this is an adapter: it takes the UUID the client has and hands the platform the id
+    underneath. `PostCommentApiController` is the same adapter for posts, for the same reason.
+  - **Why `SpotAbout` overrides the `comments()` relation the `HasComments` trait already gives it.**
+    A comment row records what it is attached to as text, and there are two ways to spell this model
+    there: the short alias `stourify_spot_about` or the full class name. The write path can only use
+    the class name, because `CommentCrudService` calls a static method on that string as-is and the
+    alias throws `Class "stourify_spot_about" not found` — that is the pre-existing boilerplate
+    defect STOURIFY-12, and a module must not patch `saas-boilerplate` around it. But the trait's
+    relation looks for the alias. Written one way and read the other, `withCount('comments')` would
+    return **zero forever with nothing failing to say so**. The override makes the relation look for
+    what this module actually writes, and its docblock says to delete it once STOURIFY-12 lands and
+    the existing rows are migrated. Full write-up in `specs/2026-08-22-spot-about-design.md` §5.6.
+
 - **Spot About — visitors can write their own notes about a spot, and vote the useful ones up**
   (STOURIFY-145). A spot has always had exactly one piece of descriptive text, written by whoever
   created it. That is the brass plaque beside a landmark: one author, one text. This adds the
