@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use App\Models\Comment;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\PostVisibility;
 use Modules\Stourify\Enums\SpotStatus;
@@ -233,4 +236,106 @@ test('a parent_id belonging to another post is rejected', function (): void {
         'body' => 'Mismatched thread.',
         'parent_id' => $foreignParent->uuid,
     ], orgHeader($this->organization))->assertUnprocessable();
+});
+
+// ---------------------------------------------------------------------------
+// Query cost
+// ---------------------------------------------------------------------------
+
+/**
+ * A post's thread must not fetch its relations one row at a time either.
+ *
+ * The About endpoint carries the twin of this test, and the two are
+ * deliberately shaped alike — the controllers are. Lazy loading is switched
+ * off for the length of the request, so an unloaded relation throws by name on
+ * the FIRST row rather than showing up as a query tally long enough to look
+ * wrong.
+ *
+ * It acts as `$this->commenter`, who holds no override role and wrote none of
+ * these comments. `AttachablePolicy::view()` returns early for an override
+ * role, so a guard written under an admin's identity passes over the very
+ * thing it exists to catch (STOURIFY-153).
+ */
+test('listing a post thread loads every relation the response reads', function (): void {
+    actingAsCommenter($this->commenter);
+
+    $parent = Comment::factory()->for($this->organization)->create([
+        'commentable_type' => Post::class,
+        'commentable_id' => $this->post->id,
+        'user_id' => $this->author->id,
+        'body' => 'Where is this?',
+    ]);
+
+    Comment::factory()->for($this->organization)->create([
+        'commentable_type' => Post::class,
+        'commentable_id' => $this->post->id,
+        'user_id' => $this->author->id,
+        'parent_id' => $parent->id,
+        'body' => 'At the summit lookout.',
+    ]);
+
+    Model::preventLazyLoading();
+
+    try {
+        $this->withoutExceptionHandling()
+            ->getJson("/api/v1/posts/{$this->post->uuid}/comments", orgHeader($this->organization))
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+    } finally {
+        Model::preventLazyLoading(false);
+    }
+});
+
+/**
+ * And the whole bill. "Does not grow with the thread" is the property an N+1
+ * breaks; an absolute number would have to be rewritten whenever anything else
+ * on this route asked one more question. The cache is flushed between the two
+ * measurements because this endpoint caches its answer, and a second identical
+ * request asks the database nothing at all.
+ */
+test('listing a post thread asks the same number of questions however long the thread is', function (): void {
+    actingAsCommenter($this->commenter);
+
+    $countQueries = function (int $replies): int {
+        Cache::flush();
+        Comment::query()->forceDelete();
+
+        $parent = Comment::factory()->for($this->organization)->create([
+            'commentable_type' => Post::class,
+            'commentable_id' => $this->post->id,
+            'user_id' => $this->author->id,
+            'body' => 'Where is this?',
+        ]);
+
+        foreach (range(1, $replies) as $n) {
+            Comment::factory()->for($this->organization)->create([
+                'commentable_type' => Post::class,
+                'commentable_id' => $this->post->id,
+                'user_id' => $this->author->id,
+                'parent_id' => $parent->id,
+                'body' => "Reply {$n}.",
+            ]);
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->getJson("/api/v1/posts/{$this->post->uuid}/comments", orgHeader($this->organization))
+            ->assertOk()
+            ->assertJsonCount($replies + 1, 'data');
+
+        $queries = count(DB::getQueryLog());
+
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    // One throwaway reading first. The very first request of the test loads
+    // the acting user's roles onto the user object and keeps them there, so
+    // whichever measurement runs first pays for a query the other never sees —
+    // a one-query difference that has nothing to do with the thread's length.
+    $countQueries(1);
+
+    expect($countQueries(6))->toBe($countQueries(2));
 });

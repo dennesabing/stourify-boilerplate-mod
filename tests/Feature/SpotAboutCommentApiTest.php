@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\Comment;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -381,4 +382,83 @@ test('the comment count does not cost a query per entry', function (): void {
     // `withCount` is one aggregate over the whole page. A per-row count would
     // put six extra queries on top of what the list already costs.
     expect($queries)->toBeLessThan(20);
+});
+
+/**
+ * The strong form of the N+1 guard: nothing the response reads may be fetched
+ * one row at a time.
+ *
+ * The count test above watches the `comments` table alone, because that is all
+ * STOURIFY-152 could safely assert while two other relations were still being
+ * read lazily. This is what it could not be: lazy loading is switched off for
+ * the length of the request, so an unloaded relation throws by name on the
+ * FIRST row instead of showing up as a query tally that has to be long enough
+ * to look wrong.
+ *
+ * It acts as `$this->commenter`, who holds no override role and wrote none of
+ * these comments — deliberately. `AttachablePolicy::view()` returns early for
+ * an override role, so an admin never reaches either read, and a guard written
+ * under an admin's identity passes over the very thing it was written to catch
+ * (STOURIFY-153).
+ */
+test('listing a thread loads every relation the response reads', function (): void {
+    Sanctum::actingAs($this->commenter);
+
+    $parent = seedAboutComment($this->about, $this->author, 'Is it open in winter?');
+    seedAboutComment($this->about, $this->author, 'Only at weekends.', ['parent_id' => $parent->id]);
+
+    Model::preventLazyLoading();
+
+    try {
+        $this->withoutExceptionHandling()
+            ->getJson("/api/v1/spot-abouts/{$this->about->uuid}/comments", orgHeader($this->organization))
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+    } finally {
+        Model::preventLazyLoading(false);
+    }
+});
+
+/**
+ * And the whole bill, not just the part of it that reads one table.
+ *
+ * Same shape as the `comments`-table count above and the same reason for the
+ * cache flush, but it counts every statement. "Does not grow with the thread"
+ * is the property an N+1 breaks; an absolute number would have to be rewritten
+ * every time anything unrelated on this route asked one more question.
+ */
+test('listing a thread asks the same number of questions however long the thread is', function (): void {
+    Sanctum::actingAs($this->commenter);
+
+    $countQueries = function (int $replies): int {
+        Cache::flush();
+        Comment::query()->forceDelete();
+
+        $parent = seedAboutComment($this->about, $this->author, 'Is it open in winter?');
+
+        foreach (range(1, $replies) as $n) {
+            seedAboutComment($this->about, $this->author, "Reply {$n}.", ['parent_id' => $parent->id]);
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->getJson("/api/v1/spot-abouts/{$this->about->uuid}/comments", orgHeader($this->organization))
+            ->assertOk()
+            ->assertJsonCount($replies + 1, 'data');
+
+        $queries = count(DB::getQueryLog());
+
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    // One throwaway reading first. The very first request of the test loads
+    // the acting user's roles onto the user object and keeps them there, so
+    // whichever measurement runs first pays for a query the other never sees —
+    // a one-query difference that has nothing to do with the thread's length.
+    $countQueries(1);
+
+    expect($countQueries(6))->toBe($countQueries(2));
 });
