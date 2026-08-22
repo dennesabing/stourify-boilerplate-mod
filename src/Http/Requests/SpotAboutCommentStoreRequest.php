@@ -63,10 +63,15 @@ class SpotAboutCommentStoreRequest extends BaseFormRequest
 
         return [
             'body' => ['required', 'string', 'min:1', 'max:2000'],
+            // The parent comment's UUID — the only identifier for a comment
+            // that this API ever hands a client (STOURIFY-152). Still scoped to
+            // THIS entry, so a parent borrowed from another thread is refused
+            // here rather than quietly attached to the wrong host.
             'parent_id' => [
                 'nullable',
-                'integer',
-                Rule::exists('comments', 'id')
+                'string',
+                'uuid',
+                Rule::exists('comments', 'uuid')
                     ->where('commentable_type', SpotAbout::class)
                     ->where('commentable_id', $about->getKey()),
             ],

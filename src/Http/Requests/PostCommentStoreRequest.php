@@ -30,10 +30,15 @@ class PostCommentStoreRequest extends BaseFormRequest
 
         return [
             'body' => ['required', 'string', 'min:1'],
+            // The parent comment's UUID — the only identifier for a comment
+            // that this API ever hands a client (STOURIFY-152). Still scoped to
+            // THIS post, so a parent from another post's thread is refused here
+            // rather than quietly attached to the wrong host.
             'parent_id' => [
                 'nullable',
-                'integer',
-                Rule::exists('comments', 'id')
+                'string',
+                'uuid',
+                Rule::exists('comments', 'uuid')
                     ->where('commentable_type', Post::class)
                     ->where('commentable_id', $post->getKey()),
             ],
