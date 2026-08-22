@@ -12,6 +12,7 @@ use Modules\Stourify\Http\Controllers\Api\V1\ProfileApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReportApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SearchApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\SpotAboutApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SyncController;
 use Modules\Stourify\Http\Controllers\Api\V1\WishlistApiController;
@@ -47,6 +48,21 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
             Route::get('/{spot}', [SpotApiController::class, 'show'])->name('show');
             Route::match(['put', 'patch'], '/{spot}', [SpotApiController::class, 'update'])->name('update');
             Route::delete('/{spot}', [SpotApiController::class, 'destroy'])->name('destroy');
+        });
+
+        // About entries — what visitors have written about a spot. A top-level
+        // resource filtered by `spot_uuid` rather than a path nested under the
+        // spot, matching how `posts` and `reviews` already read in this module.
+        //
+        // There is no `like` route here on purpose: the platform's
+        // /api/v1/reactions endpoint addresses any host by type-alias plus UUID,
+        // so `stourify_spot_about` works there already. See STOURIFY-145.
+        Route::prefix('spot-abouts')->name('spot-abouts.')->group(function (): void {
+            Route::get('/', [SpotAboutApiController::class, 'index'])->name('index');
+            Route::post('/', [SpotAboutApiController::class, 'store'])->name('store');
+            Route::get('/{about}', [SpotAboutApiController::class, 'show'])->name('show');
+            Route::match(['put', 'patch'], '/{about}', [SpotAboutApiController::class, 'update'])->name('update');
+            Route::delete('/{about}', [SpotAboutApiController::class, 'destroy'])->name('destroy');
         });
 
         Route::prefix('reviews')->name('reviews.')->group(function (): void {

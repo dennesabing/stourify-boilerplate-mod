@@ -9,18 +9,20 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Review;
+use Modules\Stourify\Models\SpotAbout;
 
 /**
  * Keeps the module's denormalized reaction counters truthful.
  *
- * `sto_posts.likes_count` and `sto_reviews.helpful_count` exist because the
- * feed and the Reviews screen render and sort on them across many rows —
+ * `sto_posts.likes_count`, `sto_reviews.helpful_count` and
+ * `sto_spot_abouts.likes_count` exist because the feed, the Reviews screen and
+ * the About tab render and sort on them across many rows —
  * counting reactions per row on read would be an N+1. The counters ARE the
  * denormalized columns; this observer is what makes them true.
  *
  * It observes the platform's `Reaction` model, so it fires for reactions on
  * every host in the app, not just Stourify's — hence the `instanceof` guards.
- * A reaction on anything that is not a Post or Review is ignored.
+ * A reaction on anything this module does not own is ignored.
  *
  * The counter is **recomputed from the table**, never incremented: an increment
  * drifts the instant anything writes outside the happy path (a switch, a bulk
@@ -63,6 +65,12 @@ class ReactionCountObserver
 
         if ($host instanceof Review) {
             $this->recount($host, Review::HELPFUL_REACTION, 'helpful_count');
+
+            return;
+        }
+
+        if ($host instanceof SpotAbout) {
+            $this->recount($host, SpotAbout::LIKE_REACTION, 'likes_count');
         }
     }
 

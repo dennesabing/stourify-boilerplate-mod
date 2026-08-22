@@ -43,6 +43,13 @@ class StourifyModule implements Module
             'stourify.spots.delete',
             'stourify.spots.manage',   // moderator: edit/delete any spot, verify
 
+            // About entries — community-written notes on a spot.
+            'stourify.spot_abouts.view',
+            'stourify.spot_abouts.create',
+            'stourify.spot_abouts.update',
+            'stourify.spot_abouts.delete',
+            'stourify.spot_abouts.manage',
+
             // Posts — photo shares attached to a spot.
             'stourify.posts.view',
             'stourify.posts.create',
@@ -75,17 +82,20 @@ class StourifyModule implements Module
      * The permissions every explorer holds — the consumer role's grant.
      *
      * The module's own `stourify.*` permissions plus the *discovered* attachable
-     * permissions on the Post, Spot and Review hosts — reactions
-     * (`posts.reactions.*`, `reviews.reactions.*`) so an explorer can like a post
-     * and mark a review helpful, and media (`posts.media.*`, `spots.media.*`) so
-     * they can put photos on what they publish. Moderator-only abilities
+     * permissions on the Post, Spot, Review and SpotAbout hosts — reactions
+     * (`posts.reactions.*`, `reviews.reactions.*`, `spot_abouts.reactions.*`) so
+     * an explorer can like a post, mark a review helpful and endorse an About
+     * entry, and media (`posts.media.*`, `spots.media.*`) so they can put photos
+     * on what they publish. Moderator-only abilities
      * (`.manage`, `cities.manage`, `reports.manage`) are deliberately absent —
      * those belong to a moderator role, not the default consumer.
      *
      * The media grants are `view` + `create` only. An uploader may already edit
      * and remove their own media through MediaPolicy's `uploaded_by_id`
      * ownership rule, so `posts.media.update` / `.delete` would buy nothing
-     * except reach over *other people's* files.
+     * except reach over *other people's* files. The About-entry reaction grant
+     * DOES include `delete`, because unliking is how you take back your own
+     * like — ReactionPolicy scopes that ability to the caller's own row.
      *
      * A role grant is not scoped to a host instance — holding
      * `posts.media.create` says "explorers may attach media to posts", not "only
@@ -100,6 +110,10 @@ class StourifyModule implements Module
         'stourify.spots.create',
         'stourify.spots.update',
         'stourify.spots.delete',
+        'stourify.spot_abouts.view',
+        'stourify.spot_abouts.create',
+        'stourify.spot_abouts.update',
+        'stourify.spot_abouts.delete',
         'stourify.posts.view',
         'stourify.posts.create',
         'stourify.posts.update',
@@ -114,6 +128,9 @@ class StourifyModule implements Module
         'stourify.reports.create',
         'posts.reactions.view',
         'posts.reactions.create',
+        'spot_abouts.reactions.view',
+        'spot_abouts.reactions.create',
+        'spot_abouts.reactions.delete',
         'reviews.reactions.view',
         'reviews.reactions.create',
         'posts.media.view',
