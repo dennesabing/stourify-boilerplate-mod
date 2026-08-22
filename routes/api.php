@@ -13,6 +13,7 @@ use Modules\Stourify\Http\Controllers\Api\V1\ReportApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SearchApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotAboutApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\SpotAboutCommentApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SyncController;
 use Modules\Stourify\Http\Controllers\Api\V1\WishlistApiController;
@@ -63,6 +64,15 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
             Route::get('/{about}', [SpotAboutApiController::class, 'show'])->name('show');
             Route::match(['put', 'patch'], '/{about}', [SpotAboutApiController::class, 'update'])->name('update');
             Route::delete('/{about}', [SpotAboutApiController::class, 'destroy'])->name('destroy');
+
+            // The conversation in the margin of one entry. Same adapter shape,
+            // and for the same reason, as the post pair below: the platform's
+            // generic comment surface wants a numeric id and no Stourify
+            // response carries one. Removing a comment needs no route here —
+            // the platform's DELETE /api/v1/comments/{uuid} is already
+            // addressed by uuid. See SpotAboutCommentApiController.
+            Route::get('/{about}/comments', [SpotAboutCommentApiController::class, 'index'])->name('comments.index');
+            Route::post('/{about}/comments', [SpotAboutCommentApiController::class, 'store'])->name('comments.store');
         });
 
         Route::prefix('reviews')->name('reviews.')->group(function (): void {

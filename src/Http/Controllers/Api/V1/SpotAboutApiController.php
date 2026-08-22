@@ -60,6 +60,11 @@ class SpotAboutApiController extends Controller
             // inside the resource, so rendering a page costs one query each in
             // total instead of one per row.
             ->with(['spot', 'user.media'])
+            // How many people have replied to this note. One aggregate over the
+            // whole page rather than a stored column, because a comment thread
+            // is written far more often than a spot page is read — the opposite
+            // of `likes_count`, which is why that one IS a column.
+            ->withCount('comments')
             ->whereHas('spot', fn ($spot) => $spot->where('uuid', $filters['spot_uuid']))
             ->when(! empty($filters['mine']), fn ($q) => $q->where('user_id', $user->id))
             ->orderBy($filters['sort'] ?? 'likes_count', $filters['direction'] ?? 'desc')
@@ -125,14 +130,18 @@ class SpotAboutApiController extends Controller
 
     /**
      * Reload one entry the way the list path loads a page of them — spot,
-     * author with the media `author.avatar_url` needs, and the viewer's own
-     * reaction — so a write response and a read response carry the same shape.
+     * author with the media `author.avatar_url` needs, the viewer's own
+     * reaction, and the comment count — so a write response and a read response
+     * carry the same shape.
      * A client that has to special-case "the fields present right after I
      * posted" is a client that will get it wrong.
      */
     private function freshForResponse(SpotAbout $about, User $viewer): SpotAbout
     {
-        $about = $this->withViewerReaction(SpotAbout::query()->with(['spot', 'user.media']), $viewer)
+        $about = $this->withViewerReaction(
+            SpotAbout::query()->with(['spot', 'user.media'])->withCount('comments'),
+            $viewer,
+        )
             ->whereKey($about->getKey())
             ->firstOrFail();
 

@@ -38,6 +38,14 @@ class SpotAboutResource extends BaseResource
 
             'likes_count' => (int) $about->likes_count,
 
+            // How many people replied to this note. Unlike `likes_count` this is
+            // not a stored column — it is counted as part of the same query that
+            // fetched the page, so there is no second number anybody has to keep
+            // truthful. Absent when the read path did not ask for it, for the
+            // same reason `is_liked` is: a client can then tell "not counted"
+            // from "nobody has replied" instead of rendering a confident zero.
+            'comments_count' => $this->whenCounted('comments', fn (): int => (int) $about->comments_count),
+
             // Present only when the viewer's own reaction was eager-loaded — the
             // read paths scope the `reactions` relation to the caller. Absent,
             // not false, otherwise, so a client can tell "not evaluated" from

@@ -97,6 +97,11 @@ class StourifyModule implements Module
      * DOES include `delete`, because unliking is how you take back your own
      * like — ReactionPolicy scopes that ability to the caller's own row.
      *
+     * The About-entry comment grants are `view` + `create` for the same reason
+     * as media: `CommentPolicy` already lets somebody edit and remove their own
+     * comment through its ownership rule, so `spot_abouts.comments.update` /
+     * `.delete` would buy nothing except reach over *other people's* replies.
+     *
      * A role grant is not scoped to a host instance — holding
      * `posts.media.create` says "explorers may attach media to posts", not "only
      * to their own". StourifyMediaPolicy supplies the missing half by requiring
@@ -131,6 +136,8 @@ class StourifyModule implements Module
         'spot_abouts.reactions.view',
         'spot_abouts.reactions.create',
         'spot_abouts.reactions.delete',
+        'spot_abouts.comments.view',
+        'spot_abouts.comments.create',
         'reviews.reactions.view',
         'reviews.reactions.create',
         'posts.media.view',

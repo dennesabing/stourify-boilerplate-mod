@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Modules\Stourify\Models;
 
+use App\Models\Comment;
 use App\Models\User;
 use App\Traits\BelongsToOrganization;
 use App\Traits\Cacheable;
@@ -14,6 +15,7 @@ use App\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Stourify\Database\Factories\SpotAboutFactory;
 
@@ -104,6 +106,38 @@ class SpotAbout extends Model
     public function supportedReactions(): array
     {
         return [self::LIKE_REACTION];
+    }
+
+    /**
+     * The comments written on this entry.
+     *
+     * This deliberately replaces the `MorphMany` that `HasComments` provides,
+     * and the reason is a disagreement about one string. Every comment row
+     * records what it is attached to as text, and there are two ways to spell
+     * this model there: the short nickname registered in the morph map
+     * (`stourify_spot_about`) or the full class name. A polymorphic relation
+     * always looks for the nickname, because that is what `getMorphClass()`
+     * returns once the class is in the map — but the rows this module writes
+     * carry the full class name, because `App\Services\Crud\CommentCrudService`
+     * calls a static method on that string as-is and a nickname throws
+     * `Class "stourify_spot_about" not found`. That defect is STOURIFY-12, and
+     * it belongs to `saas-boilerplate` rather than here.
+     *
+     * Written one way and read the other, `withCount('comments')` would return
+     * zero forever with nothing failing to say so. So this relation looks for
+     * what the module actually writes. `SpotAboutCommentApiController` is the
+     * only thing that writes it, and it spells the type the same way.
+     *
+     * **Delete this override when STOURIFY-12 lands** and the rows already
+     * written are migrated to the nickname; from that moment the trait's own
+     * version is the correct one.
+     *
+     * @return HasMany<Comment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Comment::class, 'commentable_id')
+            ->where('comments.commentable_type', self::class);
     }
 
     /**
