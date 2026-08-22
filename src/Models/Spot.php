@@ -138,6 +138,15 @@ class Spot extends Model implements HasMedia
         return $this->hasMany(Review::class);
     }
 
+    /**
+     * What visitors have written about this spot — the corkboard beside the
+     * spot's own `description`. Many per spot, one author each.
+     */
+    public function abouts(): HasMany
+    {
+        return $this->hasMany(SpotAbout::class);
+    }
+
     public function posts(): HasMany
     {
         return $this->hasMany(Post::class);

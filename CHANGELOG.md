@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Spot About — visitors can write their own notes about a spot, and vote the useful ones up**
+  (STOURIFY-145). A spot has always had exactly one piece of descriptive text, written by whoever
+  created it. That is the brass plaque beside a landmark: one author, one text. This adds the
+  corkboard next to it — anybody who has been to a spot can pin up what they know, each note carries
+  who wrote it and when, and the list orders itself so the notes other visitors endorsed sit at the
+  top.
+
+  New: the `sto_spot_abouts` table, `Models\SpotAbout`, `SpotAboutPolicy`, the
+  `stourify.spot_abouts.*` permissions, and `GET|POST /api/v1/spot-abouts` plus
+  `GET|PUT|PATCH|DELETE /api/v1/spot-abouts/{about}`. The list takes `spot_uuid` (required),
+  `per_page`, `page`, `sort` and `direction`, exactly like the module's other index endpoints.
+
+  **Liking one needed no new endpoint at all**, and that is the part worth knowing. The platform
+  already keeps every reaction in one shared table addressed by a short type name plus a UUID, so an
+  entry became likeable the moment the model picked up `HasReactions` and its alias
+  `stourify_spot_about` went into the morph map. `POST|DELETE /api/v1/reactions` has worked on it
+  ever since. The same is true of comments, which the sibling card STOURIFY-146 exposes.
+
+  Two decisions inside it that a reader should not have to reverse-engineer:
+
+  - **An entry accepts a `like` and nothing else.** `supportedReactions()` narrows the platform's
+    six-type default to one, the way `Post` and `Review` already narrow it. With six types there is
+    no single "number of likes" to sort a list by — only an unmade decision about which ones count.
+  - **The sort is `likes_count DESC, created_at DESC, id DESC`, and the last key is not decoration.**
+    `likes_count` is not unique, and paging through a list ordered by a non-unique key is unstable:
+    two rows that tie can come back in a different order on each query, so one shows up on page 1
+    *and* page 2 while another shows up on neither. `id` is unique, so appending it makes the
+    ordering total and the paging deterministic.
+
+  `likes_count` is a stored column rather than a `COUNT()` computed per request, for the reason the
+  module already stores `sto_posts.likes_count` and `sto_reviews.helpful_count`: an aggregate on
+  every page of every request gets slower exactly as a spot gets popular. `ReactionCountObserver`
+  gained a third arm and remains the column's only writer — the field is deliberately not fillable,
+  so a wrong value can only have come from one place.
+
+  Full argument, including the four alternatives that lost: `specs/2026-08-22-spot-about-design.md`
+  in the root repo.
+
 ### Changed
 
 - **A new post starts Private instead of Public** (STOURIFY-105). Creating a post used to make it

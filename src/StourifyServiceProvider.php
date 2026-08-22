@@ -24,6 +24,7 @@ use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Report;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Models\SpotAbout;
 use Modules\Stourify\Models\WishlistItem;
 use Modules\Stourify\Observers\ReactionCountObserver;
 use Modules\Stourify\Observers\ReviewObserver;
@@ -34,6 +35,7 @@ use Modules\Stourify\Policies\FollowPolicy;
 use Modules\Stourify\Policies\PostPolicy;
 use Modules\Stourify\Policies\ReportPolicy;
 use Modules\Stourify\Policies\ReviewPolicy;
+use Modules\Stourify\Policies\SpotAboutPolicy;
 use Modules\Stourify\Policies\SpotPolicy;
 use Modules\Stourify\Policies\StourifyMediaPolicy;
 use Modules\Stourify\Policies\WishlistItemPolicy;
@@ -59,6 +61,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
      */
     private const MORPH_MODELS = [
         Spot::class,
+        SpotAbout::class,
         Post::class,
         Review::class,
         City::class,
@@ -98,8 +101,9 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         // of how a review was written — API, sync push, seeder or factory.
         Review::observe(ReviewObserver::class);
 
-        // Keeps sto_posts.likes_count and sto_reviews.helpful_count truthful as
-        // reactions come and go through the platform's reaction endpoints.
+        // Keeps sto_posts.likes_count, sto_reviews.helpful_count and
+        // sto_spot_abouts.likes_count truthful as reactions come and go
+        // through the platform's reaction endpoints.
         Reaction::observe(ReactionCountObserver::class);
 
         // Every newly-registered user becomes an explorer of the public org —
@@ -140,14 +144,14 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
      */
     private function registerLegalDocuments(): void
     {
-        $dir = $this->moduleBasePath() . '/resources/legal';
+        $dir = $this->moduleBasePath().'/resources/legal';
         $updated = '11 August 2026';
 
         app(LegalDocumentRegistry::class)->register(
             new LegalDocument(
                 slug: 'privacy',
                 title: 'Privacy Policy',
-                path: $dir . '/privacy.md',
+                path: $dir.'/privacy.md',
                 updatedAt: $updated,
                 isPlaceholder: true,
                 summary: 'What Stourify collects, why, where it goes, and how to remove it.',
@@ -155,7 +159,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
             new LegalDocument(
                 slug: 'terms',
                 title: 'Terms of Service',
-                path: $dir . '/terms.md',
+                path: $dir.'/terms.md',
                 updatedAt: $updated,
                 isPlaceholder: true,
                 summary: 'The rules for using Stourify and for the content you publish on it.',
@@ -163,7 +167,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
             new LegalDocument(
                 slug: 'account-deletion',
                 title: 'Delete Your Account',
-                path: $dir . '/account-deletion.md',
+                path: $dir.'/account-deletion.md',
                 updatedAt: $updated,
                 isPlaceholder: true,
                 summary: 'How to delete your Stourify account, and exactly what happens when you do.',
@@ -197,6 +201,7 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
     {
         return [
             Spot::class => SpotPolicy::class,
+            SpotAbout::class => SpotAboutPolicy::class,
             Review::class => ReviewPolicy::class,
             Post::class => PostPolicy::class,
             Follow::class => FollowPolicy::class,
