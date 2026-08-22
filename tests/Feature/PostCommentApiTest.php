@@ -98,6 +98,22 @@ test('a stranger who cannot view the post is forbidden from listing its comments
         ->assertForbidden();
 });
 
+test('someone who can see the post but holds no comment-view permission cannot list its thread', function (): void {
+    // The second of the endpoint's two independent locks (STOURIFY-154). This
+    // user can see the post perfectly well — they just may not read what people
+    // wrote underneath it. Before that check existed, a post's thread was open
+    // to anybody who could open the post, which made `posts.comments.view` a
+    // permission nothing in the read path ever asked for.
+    $postViewerOnly = $this->createUserWithPermissions($this->organization, [
+        'stourify.posts.view',
+    ]);
+
+    actingAsCommenter($postViewerOnly);
+
+    $this->getJson("/api/v1/posts/{$this->post->uuid}/comments", orgHeader($this->organization))
+        ->assertForbidden();
+});
+
 // ---------------------------------------------------------------------------
 // Creating
 // ---------------------------------------------------------------------------

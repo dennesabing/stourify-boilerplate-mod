@@ -97,10 +97,19 @@ class StourifyModule implements Module
      * DOES include `delete`, because unliking is how you take back your own
      * like — ReactionPolicy scopes that ability to the caller's own row.
      *
-     * The About-entry comment grants are `view` + `create` for the same reason
-     * as media: `CommentPolicy` already lets somebody edit and remove their own
-     * comment through its ownership rule, so `spot_abouts.comments.update` /
-     * `.delete` would buy nothing except reach over *other people's* replies.
+     * The comment grants — `posts.comments.*` and `spot_abouts.comments.*` —
+     * are `view` + `create` for the same reason as media: `CommentPolicy`
+     * already lets somebody edit and remove their own comment through its
+     * ownership rule, so `update` / `.delete` on either host would buy nothing
+     * except reach over *other people's* replies, which is a moderator's
+     * ability rather than an explorer's.
+     *
+     * The two hosts are listed together deliberately. `posts.comments.*` was
+     * absent for months while the About-entry pair was present, so the app
+     * offered a composer on a post's thread that answered 403 to every ordinary
+     * user (STOURIFY-154) — the same defect STOURIFY-22 fixed for media. A
+     * discovered permission is only half a feature; the grant is the other half,
+     * and nothing in the platform will point out that it is missing.
      *
      * A role grant is not scoped to a host instance — holding
      * `posts.media.create` says "explorers may attach media to posts", not "only
@@ -138,6 +147,8 @@ class StourifyModule implements Module
         'spot_abouts.reactions.delete',
         'spot_abouts.comments.view',
         'spot_abouts.comments.create',
+        'posts.comments.view',
+        'posts.comments.create',
         'reviews.reactions.view',
         'reviews.reactions.create',
         'posts.media.view',
