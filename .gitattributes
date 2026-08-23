@@ -1,0 +1,19 @@
+# Line endings are settled HERE, not by whatever each machine happens to have
+# configured. Git can store a file one way and write it out another: with
+# `core.autocrlf=true` — the default on Windows, and what this project is
+# developed on — it stores Unix line endings and hands you Windows ones.
+#
+# That is invisible until a tool reads the file. Laravel Pint writes Unix
+# endings, so on a Windows checkout it reported 72 of this module every time
+# anybody ran it, and a five-file bug fix nearly landed as a whole-module
+# reformat inside its own pull request (STOURIFY-167). Nothing was wrong with
+# the code: the formatter was undoing a conversion git had just done, and git
+# would have redone it at the next checkout.
+#
+# `eol=lf` says: write Unix endings into the working tree, whatever the machine
+# thinks. That is the same line `saas-boilerplate/.gitattributes` already
+# carries, which is why the boilerplate never had this problem.
+#
+# Adding this changed no file's stored content — every blob here was already
+# Unix — so it settles the working tree without a reformat.
+* text=auto eol=lf
