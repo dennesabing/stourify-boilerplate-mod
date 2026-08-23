@@ -26,6 +26,7 @@ use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Models\SpotAbout;
 use Modules\Stourify\Models\WishlistItem;
+use Modules\Stourify\Observers\HashtagObserver;
 use Modules\Stourify\Observers\ReactionCountObserver;
 use Modules\Stourify\Observers\ReviewObserver;
 use Modules\Stourify\Observers\SyncTombstoneObserver;
@@ -105,6 +106,13 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         // sto_spot_abouts.likes_count truthful as reactions come and go
         // through the platform's reaction endpoints.
         Reaction::observe(ReactionCountObserver::class);
+
+        // Turns the hashtags in a caption or a description into real, shared
+        // tag rows — on every road into the database, which is the whole
+        // reason it is an observer rather than controller code. See
+        // HashtagObserver (STOURIFY-171).
+        Post::observe(HashtagObserver::class);
+        Spot::observe(HashtagObserver::class);
 
         // Every newly-registered user becomes an explorer of the public org —
         // membership is required to act on any of its content.

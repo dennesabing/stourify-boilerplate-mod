@@ -89,7 +89,7 @@ class SearchApiController extends Controller
             ->query(fn (Builder $builder) => $builder
                 ->published()
                 ->whereNotIn('user_id', $this->hidden())
-                ->with(['city', 'user']));
+                ->with(['city', 'user', 'tags']));
     }
 
     /**

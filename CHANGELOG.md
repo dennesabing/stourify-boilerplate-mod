@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A hashtag typed in a caption is now a real, shared tag** (STOURIFY-171). Write
+  `great noodles #streetfood` on a post, or put `#viewpoint` in a spot's description, and the word
+  becomes a row in the platform's `tags` table that everything else mentioning it points at too.
+  `#Food` and `#food` are one tag; `#café` and `#cafe` are two.
+
+  The comparison is the subject catalogue in a library. The book does not carry a copy of the
+  subject — there is one card in the drawer for "street food", and every book about it is listed on
+  that one card.
+
+  Nothing browses by tag yet; that is STOURIFY-172. What is true now is that the tags exist, they
+  are shared, and they stay in step with the text: edit a caption and the tags follow it.
+
+  **The parse hangs off the model's write, not a controller, and that is the whole design.** A spot
+  written with no signal never reaches `SpotApiController` — the app sends it later through
+  `POST /api/v1/stourify/sync/push`. Code in the controller would have tagged spots created online,
+  skipped spots created in a tunnel, and reported nothing either way. New:
+  `Support/Hashtags/HashtagParser` (a pure function of a string, with every rule as a test),
+  `Support/Hashtags/HashtagSynchronizer`, `Support/Hashtags/RendersTags` and
+  `Observers/HashtagObserver`, registered on `Post` and `Spot`.
+
+  Two smaller decisions worth knowing before changing anything here. Tags are minted with a plain
+  `create()` rather than through `CrudService`, because `CrudService` authorises `tags.create` — an
+  organisation-admin permission no ordinary explorer holds — and enforcing it would make hashtags
+  silently vanish for every normal user; `SyncTombstoneObserver` documents the same exception for
+  the same kind of side-effect write. And attaching computes a difference rather than calling
+  `sync()`, so a tag an administrator attached from the admin panel is not destroyed by an author
+  fixing a typo.
+
+  `PostResource` and `SpotResource` gain a `tags` array, eager-loaded on every read path that
+  renders them, with a test pinning that five times the rows does not cost more queries.
+
 - **Line endings are settled here now, so a formatter stops rewriting the whole module**
   (STOURIFY-167): new `.gitattributes` carrying `* text=auto eol=lf`.
 
