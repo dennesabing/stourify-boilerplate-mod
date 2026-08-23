@@ -16,6 +16,7 @@ use Modules\Stourify\Http\Controllers\Api\V1\SpotAboutApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotAboutCommentApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SpotApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SyncController;
+use Modules\Stourify\Http\Controllers\Api\V1\TagApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\WishlistApiController;
 
 /*
@@ -150,6 +151,13 @@ Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
         // Discovery search. Namespaced under /discover so it does not collide
         // with the boilerplate's generic /api/v1/search — see SearchApiController.
         Route::get('/discover/search', [SearchApiController::class, 'index'])->name('discover.search');
+
+        // One hashtag, by the word itself rather than by a UUID — the word IS
+        // the identity, and the app builds this link from a caption it is
+        // already holding. Its job is to let a tag page tell "no such tag" from
+        // "a tag with nothing on it yet"; a listing alone answers both with an
+        // empty array. See STOURIFY-172 and TagApiController.
+        Route::get('/discover/tags/{slug}', [TagApiController::class, 'show'])->name('discover.tags.show');
 
         // The offline-sync spine — a mobile WatermelonDB client's delta (pull)
         // and push (drain). No dedicated permission on the delta: it returns

@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hashtags are now a way in, not just a thing you typed** (STOURIFY-172). The previous card made
+  the words real; this one makes them findable. Three things become possible:
+
+  - `GET /api/v1/posts?tag=streetfood` and `GET /api/v1/spots?tag=viewpoint` return one hashtag's
+    content.
+  - `GET /api/v1/discover/tags/{slug}` looks a hashtag up by the word itself, answering `404` when
+    no such word exists.
+  - `GET /api/v1/discover/search?q=street&type=tags` returns hashtags instead of the `422` it used
+    to. That is the whole of STOURIFY-25, which asked whether tag search was a product requirement
+    at all; it is, and `Tag` already carried the searchable projection that card wondered about.
+
+  **The filters are conditions on the existing listings, not endpoints of their own**, and that is
+  the design rather than a shortcut. Both listings already run their query through a `visibleTo()`
+  that hides other people's drafts, other people's unpublished work and anybody the viewer has
+  blocked. A separate tag endpoint would have to re-derive all of that, and the day the two copies
+  disagree the tag listing is the one that leaks. As one more `where` on a query that has already
+  been scoped, a tag listing physically cannot be more permissive than the ordinary one.
+
+  **The lookup exists so a tag page can say three things instead of two.** A listing alone answers
+  both *no such tag* and *a tag with nothing on it yet* with an empty array — and an app that treats
+  a failed request as "no results" answers a third situation the same way. STOURIFY-85 to
+  STOURIFY-90 are a cluster of cards about exactly that confusion. The `404` is what makes the
+  distinction available to a client at all.
+
+  Everything user-facing matches on `type = 'hashtag'`. The `tags` table is shared with the admin
+  panel's own tag manager, whose labels are internal, and two tests fail on purpose if that
+  condition is removed from either the filter or the search.
+
 - **A hashtag typed in a caption is now a real, shared tag** (STOURIFY-171). Write
   `great noodles #streetfood` on a post, or put `#viewpoint` in a spot's description, and the word
   becomes a row in the platform's `tags` table that everything else mentioning it points at too.

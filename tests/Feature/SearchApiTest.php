@@ -164,9 +164,18 @@ test('a query shorter than two characters is rejected', function (): void {
 });
 
 test('an unknown type is rejected', function (): void {
+    // This used to send `type=tags`, which was an unknown type until
+    // STOURIFY-172 made it a real one. The assertion being made here is that
+    // the whitelist bites — so it now uses a word that is genuinely not in it,
+    // and `tags` gets a positive test of its own in HashtagBrowsingTest.
+    //
+    // Worth flagging rather than quietly rewriting: a test needing an edit is
+    // normally the sign that a change was wrong. This is the exception that
+    // proves the shape of the rule — the test was pinning the ABSENCE of the
+    // feature, so it could not survive the feature arriving.
     actingAsSearcher($this->explorer);
 
-    $this->getJson('/api/v1/discover/search?q=test&type=tags', orgHeader($this->organization))
+    $this->getJson('/api/v1/discover/search?q=test&type=unicorns', orgHeader($this->organization))
         ->assertStatus(422)
         ->assertJsonValidationErrors(['type']);
 });

@@ -47,6 +47,11 @@ class SpotIndexRequest extends BaseFormRequest
             'city_uuid' => ['nullable', 'uuid'],
             'mine' => ['nullable', 'boolean'],
 
+            // One hashtag's spots (STOURIFY-172). A slug, capped at the
+            // parser's own length. See PostIndexRequest for why there is no
+            // pattern rule beyond that.
+            'tag' => ['nullable', 'string', 'max:64'],
+
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
             'sort' => ['nullable', Rule::in(self::SORTABLE)],
