@@ -7,6 +7,7 @@ namespace Modules\Stourify\Http\Resources;
 use App\Http\Resources\BaseResource;
 use Illuminate\Http\Request;
 use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Support\Hashtags\RendersTags;
 
 /**
  * The wire shape of a spot.
@@ -23,6 +24,8 @@ use Modules\Stourify\Models\Spot;
  */
 class SpotResource extends BaseResource
 {
+    use RendersTags;
+
     /**
      * `verify` is a module-specific ability on top of the standard set.
      *
@@ -77,6 +80,13 @@ class SpotResource extends BaseResource
                     'url' => $media->getUrl(),
                     'thumb_url' => $media->hasGeneratedConversion('thumb') ? $media->getUrl('thumb') : null,
                 ])->all(), []),
+
+            // The hashtags the author typed in the text, ready to render as
+            // links. Only hashtags — a tag an administrator filed this under
+            // is a different surface with a different audience. Present only
+            // when eager-loaded, like `media` above and for the same reason:
+            // a page of 25 costs one query, not 25.
+            'tags' => $this->whenLoaded('tags', fn (): array => $this->hashtagsOf($spot), []),
 
             'created_at' => $spot->created_at?->toIso8601String(),
             'updated_at' => $spot->updated_at?->toIso8601String(),

@@ -60,7 +60,7 @@ class FeedApiController extends Controller
             // inside the resource, so rendering PostResource::author and
             // PostResource::media for a page of posts costs one query each
             // total rather than one per row.
-            ->with(['spot', 'user.media', 'media']);
+            ->with(['spot', 'user.media', 'media', 'tags']);
 
         $posts = $this->withViewerReaction($query, $user)
             ->orderByDesc('published_at')

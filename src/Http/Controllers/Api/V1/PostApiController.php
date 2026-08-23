@@ -62,7 +62,7 @@ class PostApiController extends Controller
             // inside the resource, so rendering PostResource::author and
             // PostResource::media for a page of posts costs one query each
             // total rather than one per row.
-            ->with(['spot', 'user.media', 'media'])
+            ->with(['spot', 'user.media', 'media', 'tags'])
             ->when(! empty($filters['spot_uuid']), fn (Builder $q) => $q->whereHas(
                 'spot', fn (Builder $spot) => $spot->where('uuid', $filters['spot_uuid'])
             ))
@@ -91,6 +91,7 @@ class PostApiController extends Controller
             'spot',
             'user.media',
             'media',
+            'tags',
             'reactions' => fn ($q) => $q->where('user_id', $request->user()->id),
         ]);
 
@@ -256,7 +257,7 @@ class PostApiController extends Controller
         // reply to a request that created nothing and found what it asked for.
         // Inert for every other caller: route binding never resolves a deleted
         // post, so update() and publish() are never holding one.
-        $post = $this->withViewerReaction(Post::withTrashed()->with(['spot', 'user.media']), $viewer)
+        $post = $this->withViewerReaction(Post::withTrashed()->with(['spot', 'user.media', 'tags']), $viewer)
             ->whereKey($post->getKey())
             ->firstOrFail();
 

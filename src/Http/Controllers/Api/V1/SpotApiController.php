@@ -73,13 +73,13 @@ class SpotApiController extends Controller
                 return Spot::search($filters['q'])
                     ->query(fn (Builder $query) => $this->applyFilters(
                         $this->visibleTo($query, $user), $filters
-                    )->with(['city', 'user', 'media']))
+                    )->with(['city', 'user', 'media', 'tags']))
                     ->paginate($perPage);
             }
 
             $query = $this->applyFilters(
                 $this->visibleTo(Spot::query(), $user), $filters
-            )->with(['city', 'user', 'media']);
+            )->with(['city', 'user', 'media', 'tags']);
 
             return $query
                 ->orderBy($filters['sort'] ?? 'created_at', $filters['direction'] ?? 'desc')
@@ -121,7 +121,7 @@ class SpotApiController extends Controller
             ->published()
             ->nearby($latitude, $longitude, $radiusKm)
             ->whereNotIn('user_id', Block::hiddenUserIdsFor($request->user()))
-            ->with(['city', 'user', 'media'])
+            ->with(['city', 'user', 'media', 'tags'])
             ->paginate($perPage));
 
         $this->attachDistances($spots, $latitude, $longitude);
@@ -134,7 +134,7 @@ class SpotApiController extends Controller
         $this->authorize('view', $spot);
 
         return $this->success(
-            new SpotResource($spot->load(['city', 'user', 'media'])),
+            new SpotResource($spot->load(['city', 'user', 'media', 'tags'])),
         );
     }
 
@@ -150,7 +150,7 @@ class SpotApiController extends Controller
         ]);
 
         return $this->success(
-            new SpotResource($spot->load(['city', 'user'])),
+            new SpotResource($spot->load(['city', 'user', 'tags'])),
             201,
             'Spot created successfully.',
         );
@@ -163,7 +163,7 @@ class SpotApiController extends Controller
         $spot = CrudService::for(Spot::class)->update($spot, $this->resolveRelations($data));
 
         return $this->success(
-            new SpotResource($spot->load(['city', 'user'])),
+            new SpotResource($spot->load(['city', 'user', 'tags'])),
             200,
             'Spot updated successfully.',
         );
