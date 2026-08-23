@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`POST /posts` recognises a retry instead of making a second post** (STOURIFY-166).
+
+  The post's id is decided here, on the server, so a client only learns it from the reply. If that
+  reply is lost — a dropped radio, the app killed — the client cannot tell whether the post was made,
+  so it has to try again, and the second attempt used to create another post. Posting a letter and
+  only writing the tracking number down once the receipt arrives: drop the receipt and you post it
+  twice.
+
+  The endpoint now takes an optional `idempotency_key`, a name the caller puts on the request. A
+  request carrying a key already seen from that author gets back the post the first attempt made,
+  with `200` instead of `201`, and nothing new is created. It is the same mechanism
+  `POST /media/attach` already uses for photos, applied to the post itself.
+
+  Two details worth knowing before changing it. The guarantee is held by a unique index on
+  `(user_id, idempotency_key)`, not by the lookup — two retries arriving at once both read nothing
+  and both insert, and the loser reads the winner's post. And the lookup deliberately sees
+  soft-deleted posts, because a deleted post keeps its key and the index keeps covering it; a lookup
+  that skipped them would turn a retry into a `500`.
+
+  New migration `2026_08_23_000001_add_idempotency_key_to_sto_posts_table.php`. Callers that send no
+  key are completely unaffected, and posts that already exist simply have none.
+
 - **A test that asks whether a real explorer can comment, rather than whether a permission works**
   (STOURIFY-154). `tests/Feature/ExplorerPostCommentPermissionTest.php` builds its users from the
   `explorer` role exactly as `StourifyModule` publishes it and never names a permission itself.

@@ -54,6 +54,12 @@ class PostStoreRequest extends BaseFormRequest
             'caption' => ['nullable', 'string', 'max:2200'],
             'visibility' => ['nullable', Rule::enum(PostVisibility::class)],
             'publish' => ['nullable', 'boolean'],
+            // Optional and client-minted. It exists because nothing else on
+            // this request can identify a retry: the post has no id until the
+            // server makes one, which is the whole problem. Capped at the
+            // column's width so an over-long key is refused here rather than
+            // silently truncated into a key that matches nothing.
+            'idempotency_key' => ['nullable', 'string', 'max:64'],
         ];
     }
 
