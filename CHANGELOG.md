@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Line endings are settled here now, so a formatter stops rewriting the whole module**
+  (STOURIFY-167): new `.gitattributes` carrying `* text=auto eol=lf`.
+
+  Git can store a file one way and hand it to you another. With `core.autocrlf=true` — the normal
+  default on Windows, which this project is developed on — it stores Unix line endings and writes
+  Windows ones into your folder. Invisible in an editor, invisible in a diff, and visible to every
+  tool that reads the file: Laravel Pint reported **72 of this module's 144 PHP files** as needing
+  changes on a tree nobody had touched, because it was proposing to undo a conversion git had just
+  done and would redo at the next checkout. A five-file bug fix nearly landed as a whole-module
+  reformat inside its own pull request.
+
+  This is the same line `saas-boilerplate/.gitattributes` has always carried, which is why the
+  boilerplate never had the problem. **No file's stored content changed** — all 176 tracked files
+  were already stored with Unix endings, so this is one new file rather than 176 rewritten ones.
+  With it in place, pointing pint at the entire module reports `passed` with zero findings: the
+  other rules that appeared to disagree were all knock-on effects of the line endings, and the
+  module was already written in exactly the style pint wants.
+
 - **`POST /posts` recognises a retry instead of making a second post** (STOURIFY-166).
 
   The post's id is decided here, on the server, so a client only learns it from the reply. If that
