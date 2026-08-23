@@ -101,7 +101,13 @@ class SearchApiController extends Controller
     private function tags(string $query): \Laravel\Scout\Builder
     {
         return Tag::search($query)
-            ->query(fn (Builder $builder) => $builder->where('type', HashtagParser::TAG_TYPE));
+            ->query(fn (Builder $builder) => $builder
+                ->where('type', HashtagParser::TAG_TYPE)
+                // ...and not one an administrator has taken down. Search is the
+                // surface that turned an offensive word from something you had
+                // to stumble across into something you could go and look for,
+                // so it is the one this switch most has to reach (STOURIFY-174).
+                ->notSuppressed());
     }
 
     /**

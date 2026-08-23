@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A hashtag an administrator has taken down stops being a way in** (STOURIFY-174). Five surfaces
+  present a hashtag to a reader, and each now skips a suppressed one: the lookup answers `404`, the
+  word leaves `?type=tags` search and the combined preview, `?tag=` on the post and spot listings
+  returns nothing, and it is no longer listed among a record's tags.
+
+  **The posts and spots carrying it are completely untouched** — still published, still in every
+  listing they were in, still reportable. Suppressing a word is a judgement about the word, not about
+  everybody who ever used it, and a post is still moderated as a post. `HashtagSuppressionTest`
+  asserts that directly rather than leaving it to be inferred, because a suite that only checked the
+  word had vanished would pass just as happily over a change that took a dozen posts out of the feed
+  with it.
+
+  The lookup answering a plain `404` rather than a new state is deliberate: from where the reader
+  stands, a word nobody typed and a word that has been taken down are the same fact — there is nothing
+  here to open — and the app already has a correct, tested sentence for it.
+
+  The flag and the administrator's control live in `saas-boilerplate`, which owns the `tags` table.
+
+### Added
+
 - **Hashtags are now a way in, not just a thing you typed** (STOURIFY-172). The previous card made
   the words real; this one makes them findable. Three things become possible:
 

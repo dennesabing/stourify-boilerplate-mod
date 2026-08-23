@@ -16,6 +16,11 @@ use Illuminate\Support\Collection;
  * attached from the admin panel, and those belong to a different surface with
  * a different audience — a reader tapping a word in a caption expects to land
  * on that word, not on an internal label somebody filed the post under.
+ *
+ * And only hashtags an administrator has not taken down. A suppressed word
+ * still hangs off the record — deliberately, so that un-hiding it restores the
+ * true picture rather than a partial one — it simply stops being offered as
+ * something to tap (STOURIFY-174).
  */
 trait RendersTags
 {
@@ -28,7 +33,8 @@ trait RendersTags
         $tags = $record->getRelation('tags');
 
         return $tags
-            ->filter(fn (Tag $tag): bool => $tag->type === HashtagParser::TAG_TYPE)
+            ->filter(fn (Tag $tag): bool => $tag->type === HashtagParser::TAG_TYPE
+                && ! $tag->isSuppressed())
             ->map(fn (Tag $tag): array => ['slug' => (string) $tag->slug, 'name' => (string) $tag->name])
             ->values()
             ->all();

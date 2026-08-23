@@ -232,6 +232,13 @@ class SpotApiController extends Controller
                 'tags', fn (Builder $t) => $t
                     ->where('tags.slug', $filters['tag'])
                     ->where('tags.type', HashtagParser::TAG_TYPE)
+                    // A word an administrator has taken down is not a way in
+                    // any more, so asking for its content answers with none.
+                    // The content itself is untouched -- these same records
+                    // are still returned by the unfiltered listing, because
+                    // suppression is a judgement about the word and not about
+                    // everybody who used it (STOURIFY-174).
+                    ->notSuppressed()
             ));
     }
 
