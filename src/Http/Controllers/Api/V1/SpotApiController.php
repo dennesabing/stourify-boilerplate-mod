@@ -24,6 +24,7 @@ use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Policies\SpotPolicy;
+use Modules\Stourify\Support\Hashtags\HashtagParser;
 
 /**
  * The spots API — the entity every other Stourify surface references.
@@ -219,6 +220,18 @@ class SpotApiController extends Controller
             ->when(! empty($filters['mine']), fn (Builder $q) => $q->where('user_id', request()->user()->id))
             ->when(! empty($filters['city_uuid']), fn (Builder $q) => $q->whereHas(
                 'city', fn (Builder $city) => $city->where('uuid', $filters['city_uuid'])
+            ))
+            // One hashtag's spots. This runs on a query `visibleTo()` has
+            // already scoped, so it can only ever narrow — a tag listing cannot
+            // surface another explorer's draft (STOURIFY-172).
+            //
+            // Matching on `type` as well as `slug` keeps the admin panel's own
+            // curated vocabulary out of a user-facing listing; the two share the
+            // tags table and are not the same thing.
+            ->when(! empty($filters['tag']), fn (Builder $q) => $q->whereHas(
+                'tags', fn (Builder $t) => $t
+                    ->where('tags.slug', $filters['tag'])
+                    ->where('tags.type', HashtagParser::TAG_TYPE)
             ));
     }
 

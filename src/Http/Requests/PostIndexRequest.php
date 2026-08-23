@@ -37,6 +37,13 @@ class PostIndexRequest extends BaseFormRequest
             // believed it was showing one person's work.
             'user_uuid' => ['nullable', 'uuid'],
 
+            // One hashtag's posts (STOURIFY-172). The value is a slug — the
+            // lowercased form the parser stores — and the length ceiling is the
+            // parser's own. Deliberately no pattern beyond that: a slug nothing
+            // uses is an empty list, which is the right answer, and a stricter
+            // rule would turn somebody's typo into a 422 the app has to explain.
+            'tag' => ['nullable', 'string', 'max:64'],
+
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
             'sort' => ['nullable', Rule::in(self::SORTABLE)],

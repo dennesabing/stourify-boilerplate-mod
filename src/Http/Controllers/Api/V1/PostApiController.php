@@ -24,6 +24,7 @@ use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Spot;
 use Modules\Stourify\Policies\PostPolicy;
 use Modules\Stourify\Support\AttachesExplorerProfiles;
+use Modules\Stourify\Support\Hashtags\HashtagParser;
 use Modules\Stourify\Support\LoadsViewerReactions;
 
 /**
@@ -72,6 +73,20 @@ class PostApiController extends Controller
             // followers-only posts. It is a filter, never a permission.
             ->when(! empty($filters['user_uuid']), fn (Builder $q) => $q->whereHas(
                 'user', fn (Builder $u) => $u->where('uuid', $filters['user_uuid'])
+            ))
+            // One hashtag's posts. Narrows the ALREADY-scoped query above, so a
+            // tag listing physically cannot be more permissive than the ordinary
+            // one — that is why this is a filter here rather than an endpoint of
+            // its own re-deriving the audience rule (STOURIFY-172).
+            //
+            // `type` is part of the match because the tags table is shared with
+            // the admin panel's own vocabulary: without it, a curated label
+            // filed under a slug an explorer also types would drag its content
+            // into a user-facing listing.
+            ->when(! empty($filters['tag']), fn (Builder $q) => $q->whereHas(
+                'tags', fn (Builder $t) => $t
+                    ->where('tags.slug', $filters['tag'])
+                    ->where('tags.type', HashtagParser::TAG_TYPE)
             ))
             ->orderBy($filters['sort'] ?? 'published_at', $filters['direction'] ?? 'desc')
             ->paginate($perPage));

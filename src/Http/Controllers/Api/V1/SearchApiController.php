@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Stourify\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Tag;
 use App\Traits\ApiResponses;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,13 +14,15 @@ use Modules\Stourify\Http\Requests\SearchRequest;
 use Modules\Stourify\Http\Resources\CityResource;
 use Modules\Stourify\Http\Resources\PersonResource;
 use Modules\Stourify\Http\Resources\SpotResource;
+use Modules\Stourify\Http\Resources\TagResource;
 use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Support\Hashtags\HashtagParser;
 
 /**
- * Discovery search across spots, cities and people.
+ * Discovery search across spots, cities, people and hashtags.
  *
  * This is the module's own search, at `/discover/search`, deliberately not the
  * boilerplate's generic `/api/v1/search`. Two reasons: the generic endpoint
@@ -62,6 +65,7 @@ class SearchApiController extends Controller
             'spots' => SpotResource::collection($this->spots($query)->paginate($perPage)),
             'cities' => CityResource::collection($this->cities($query)->paginate($perPage)),
             'people' => PersonResource::collection($this->people($query)->paginate($perPage)),
+            'tags' => TagResource::collection($this->tags($query)->paginate($perPage)),
             default => $this->preview($query),
         };
     }
@@ -75,7 +79,29 @@ class SearchApiController extends Controller
             'spots' => SpotResource::collection($this->spots($query)->take(self::PREVIEW_LIMIT)->get()),
             'cities' => CityResource::collection($this->cities($query)->take(self::PREVIEW_LIMIT)->get()),
             'people' => PersonResource::collection($this->people($query)->take(self::PREVIEW_LIMIT)->get()),
+            'tags' => TagResource::collection($this->tags($query)->take(self::PREVIEW_LIMIT)->get()),
         ]);
+    }
+
+    /**
+     * Hashtag hits — the words themselves, not the things carrying them.
+     *
+     * This is the whole of STOURIFY-25, and it needed no new searchable
+     * projection: `Tag` already uses `OrganizationSearchable` and declares its
+     * own `searchableAs()`, so it goes through Scout exactly like the three
+     * sections above it.
+     *
+     * **The `type` constraint is the part that matters.** The `tags` table is
+     * shared with the admin panel's own tag manager, whose labels are internal
+     * and have a different audience. Without this line, searching would show an
+     * explorer words no explorer ever typed and no tag page could explain.
+     *
+     * @return \Laravel\Scout\Builder<Tag>
+     */
+    private function tags(string $query): \Laravel\Scout\Builder
+    {
+        return Tag::search($query)
+            ->query(fn (Builder $builder) => $builder->where('type', HashtagParser::TAG_TYPE));
     }
 
     /**
