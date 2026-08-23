@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -596,4 +597,180 @@ test('the list rejects an unsortable column', function (): void {
     $this->getJson('/api/v1/posts?sort=user_id', orgHeader($this->organization))
         ->assertStatus(422)
         ->assertJsonValidationErrors(['sort']);
+});
+
+// ---------------------------------------------------------------------------
+// Idempotent creation (STOURIFY-166)
+//
+// `POST /posts` mints the post's id server-side, so a client that never hears
+// the answer cannot tell whether the post was made. It has to retry, and
+// without a way to recognise the retry the server makes a second post. These
+// pin the recognition.
+// ---------------------------------------------------------------------------
+
+test('the same key sent twice creates one post and returns the first one', function (): void {
+    actingAsPoster($this->author);
+
+    $first = $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-abc123',
+        'spot_uuid' => $this->spot->uuid,
+        'caption' => 'Golden hour.',
+    ], orgHeader($this->organization))->assertCreated();
+
+    $second = $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-abc123',
+        'spot_uuid' => $this->spot->uuid,
+        'caption' => 'Golden hour.',
+    ], orgHeader($this->organization))->assertOk();
+
+    expect($second->json('data.uuid'))->toBe($first->json('data.uuid'))
+        ->and(Post::query()->where('user_id', $this->author->id)->count())->toBe(1);
+});
+
+/**
+ * A key is only ever meaningful to the client that minted it. Two people whose
+ * apps happen to produce the same string must each get their own post — the
+ * reason the unique index is scoped to the author rather than made global.
+ */
+test('two explorers sending the same key each get their own post', function (): void {
+    actingAsPoster($this->author);
+    $mine = $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-collision',
+        'caption' => 'Mine.',
+    ], orgHeader($this->organization))->assertCreated();
+
+    actingAsPoster($this->viewer);
+    $theirs = $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-collision',
+        'caption' => 'Theirs.',
+    ], orgHeader($this->organization))->assertCreated();
+
+    expect($theirs->json('data.uuid'))->not->toBe($mine->json('data.uuid'))
+        ->and(Post::query()->count())->toBe(2);
+});
+
+/**
+ * The key asserts "this is the request I already sent you", so a body that
+ * disagrees is a confused client rather than a new intention. The committed
+ * post wins, unchanged — see the ASSUMPTION note on STOURIFY-166.
+ */
+test('a repeat carrying different content returns the first post unchanged', function (): void {
+    actingAsPoster($this->author);
+
+    $first = $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-drifted',
+        'caption' => 'What I actually wrote.',
+    ], orgHeader($this->organization))->assertCreated();
+
+    $second = $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-drifted',
+        'caption' => 'Something else entirely.',
+    ], orgHeader($this->organization))->assertOk();
+
+    expect($second->json('data.uuid'))->toBe($first->json('data.uuid'))
+        ->and($second->json('data.caption'))->toBe('What I actually wrote.')
+        ->and(Post::query()->count())->toBe(1);
+});
+
+test('sending no key behaves exactly as before, and two such requests make two posts', function (): void {
+    actingAsPoster($this->author);
+
+    $first = $this->postJson('/api/v1/posts', [
+        'caption' => 'One.',
+    ], orgHeader($this->organization))->assertCreated();
+
+    $second = $this->postJson('/api/v1/posts', [
+        'caption' => 'Two.',
+    ], orgHeader($this->organization))->assertCreated();
+
+    expect($second->json('data.uuid'))->not->toBe($first->json('data.uuid'))
+        ->and(Post::query()->count())->toBe(2);
+});
+
+/**
+ * The case that would otherwise be a 500. A post soft-deletes, so its row and
+ * its key stay in the table and the unique index keeps covering them. A lookup
+ * that ignored deleted rows would find nothing, insert, and hit the index.
+ */
+test('a repeat whose post was deleted returns that post rather than erroring', function (): void {
+    actingAsPoster($this->author);
+
+    $first = $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-since-deleted',
+        'caption' => 'Second thoughts.',
+    ], orgHeader($this->organization))->assertCreated();
+
+    $this->deleteJson("/api/v1/posts/{$first->json('data.uuid')}", [], orgHeader($this->organization))
+        ->assertOk();
+
+    $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-since-deleted',
+        'caption' => 'Second thoughts.',
+    ], orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.uuid', $first->json('data.uuid'));
+
+    expect(Post::withTrashed()->count())->toBe(1);
+});
+
+/**
+ * The lookup in `store()` is a check followed by an insert, which is a race no
+ * amount of checking closes: two retries in flight at once both read nothing
+ * and both insert. The unique index is what actually holds the guarantee, and
+ * the loser catches the violation and re-reads.
+ *
+ * What is pinned here is the *guard* on that catch, which is the half that can
+ * go quietly wrong. A catch that simply reported success on any unique-index
+ * violation would turn every collision into a fabricated 200 pointing at a post
+ * that may not exist. So when the re-read finds nothing, the exception must come
+ * back out rather than be dressed up as a result.
+ *
+ * The twin is inserted from a `creating` hook — the exact instant the other
+ * request would have won — and is rolled back with the failed insert, because
+ * `CrudService::create()` wraps the write in a transaction. That is what makes
+ * this the *unresolvable* violation rather than the ordinary one.
+ *
+ * The genuinely concurrent case, where the other request has committed, is not
+ * simulable here: this suite runs one in-memory SQLite connection inside a
+ * single transaction, so there is no second committed writer to lose to. It is
+ * covered by the live run instead.
+ */
+test('a unique-constraint violation that resolves to nothing is re-thrown, not reported as success', function (): void {
+    actingAsPoster($this->author);
+
+    $author = $this->author;
+    $organization = $this->organization;
+
+    Post::creating(function () use ($author, $organization): void {
+        DB::table('sto_posts')->insert([
+            'uuid' => (string) Str::uuid(),
+            'idempotency_key' => 'outbox-raced',
+            'organization_id' => $organization->id,
+            'user_id' => $author->id,
+            'visibility' => PostVisibility::Private->value,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    });
+
+    $this->withoutExceptionHandling();
+
+    expect(fn () => $this->postJson('/api/v1/posts', [
+        'idempotency_key' => 'outbox-raced',
+        'caption' => 'Sent twice at once.',
+    ], orgHeader($this->organization)))
+        ->toThrow(UniqueConstraintViolationException::class);
+
+    expect(Post::withTrashed()->count())->toBe(0);
+});
+
+test('an over-long key is rejected rather than silently truncated', function (): void {
+    actingAsPoster($this->author);
+
+    $this->postJson('/api/v1/posts', [
+        'idempotency_key' => str_repeat('k', 65),
+        'caption' => 'Too long.',
+    ], orgHeader($this->organization))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['idempotency_key']);
 });

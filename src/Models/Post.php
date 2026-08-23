@@ -62,6 +62,11 @@ class Post extends Model implements HasMedia
         'caption',
         'visibility',
         'published_at',
+        // The name the CLIENT put on the create request, so a retry after a
+        // lost response is recognised rather than made into a second post.
+        // Never read by anything that renders a post — see the migration that
+        // adds the column, and PostApiController::store().
+        'idempotency_key',
     ];
 
     /**
