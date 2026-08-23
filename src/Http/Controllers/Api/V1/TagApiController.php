@@ -70,6 +70,14 @@ class TagApiController extends Controller
             // different surface with a different audience — surfacing it here
             // would leak the admin vocabulary into the product.
             ->where('type', HashtagParser::TAG_TYPE)
+            // A word an administrator has taken down answers exactly as a word
+            // nobody ever typed does. From where the reader stands the two are
+            // the same fact -- there is nothing here to open -- and the app
+            // already has a correct, tested sentence for it. Inventing a
+            // separate state would mean writing copy that explains a
+            // moderation decision to somebody who did not make it
+            // (STOURIFY-174).
+            ->notSuppressed()
             ->first());
 
         if ($tag === null) {
