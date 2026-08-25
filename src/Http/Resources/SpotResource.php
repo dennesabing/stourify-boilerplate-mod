@@ -49,12 +49,29 @@ class SpotResource extends BaseResource
             'slug' => $spot->slug,
             'description' => $spot->description,
 
-            'latitude' => $spot->latitude,
-            'longitude' => $spot->longitude,
-            'address' => $spot->address,
-            $this->mergeWhen(isset($spot->distance_km), fn (): array => [
-                'distance_km' => round((float) $spot->distance_km, 3),
+            /*
+             * A contributor can hide the position of their spots
+             * (`shows_location_on_spots`), and when they do the keys are ABSENT
+             * rather than blurred or nulled (STOURIFY-185).
+             *
+             * Rounding to a coarse grid was the tempting alternative — every
+             * client keeps working and a map still has something to draw. It
+             * lost because it is a lie the client cannot detect: the response
+             * still looks like a position, so the app renders a pin somewhere
+             * plausible and wrong while the user believes it is hidden. Absence
+             * is the only version a client can recognise and render honestly.
+             *
+             * `distance_km` goes with them. It is the same fact expressed as a
+             * radius, and leaving it behind would hand back what the two lines
+             * above just withheld.
+             */
+            $this->mergeWhen(! $spot->locationHiddenFrom($request->user()), fn (): array => [
+                'latitude' => $spot->latitude,
+                'longitude' => $spot->longitude,
+                ...(isset($spot->distance_km) ? ['distance_km' => round((float) $spot->distance_km, 3)] : []),
             ]),
+
+            'address' => $spot->address,
 
             'categories' => $spot->categories ?? [],
             'hours' => $spot->hours,

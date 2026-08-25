@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Stourify\Database\Factories\SpotFactory;
 use Modules\Stourify\Enums\SpotStatus;
@@ -40,6 +41,21 @@ class Spot extends Model implements HasMedia
         HasPermissionPrefix, HasReactions, HasTags, HasUuid, OrganizationSearchable, SoftDeletes;
 
     protected $table = 'sto_spots';
+
+    /**
+     * Always loaded, because every rendered spot asks whether its contributor
+     * hid the location and the answer lives on another table.
+     *
+     * This is on the model rather than on each caller's `with()` on purpose. A
+     * spot is nested inside posts, reviews, wishlist items and the feed, and a
+     * `locationHiddenFrom()` that has to fall back to a lazy query costs one
+     * query per row — an N+1 the feed's own query-count test caught the moment
+     * it appeared. Fixing it at six call sites would leave the seventh to
+     * whoever writes it next; fixing it here cannot be forgotten.
+     *
+     * @var list<string>
+     */
+    protected $with = ['contributorProfile'];
 
     /**
      * @var list<string>
@@ -126,6 +142,85 @@ class Spot extends Model implements HasMedia
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_user_id');
+    }
+
+    /**
+     * The contributor's explorer profile, joined on `user_id` rather than
+     * through the user.
+     *
+     * It exists for one question — has this contributor hidden the location of
+     * their spots? — and the shape is what keeps that question cheap. Reaching
+     * it as `user.explorerProfile` would mean eager-loading two relations on
+     * every list of spots to read one boolean; a direct `hasOne` on the shared
+     * `user_id` reads it in one.
+     */
+    public function contributorProfile(): HasOne
+    {
+        return $this->hasOne(ExplorerProfile::class, 'user_id', 'user_id');
+    }
+
+    /**
+     * Is this spot's position withheld from `$viewer`?
+     *
+     * `shows_location_on_spots` used to be a curtain rail with no curtain: the
+     * column was stored, synced and returned to its owner, and read by nothing,
+     * so every caller received exact coordinates regardless (STOURIFY-185).
+     *
+     * Three rules, and the last two matter as much as the first:
+     *
+     *   - A contributor with NO profile row shows their location. The flag
+     *     defaults to `true`, and most spots predate any profile; if absence
+     *     read as "hidden" this would have stripped coordinates from most of the
+     *     catalogue the day it merged.
+     *   - The contributor always sees their own.
+     *   - A moderator always sees them. A report about a spot is frequently a
+     *     report about WHERE it is, and a queue that cannot see the location
+     *     cannot act on it. This reuses `viewAnyDraft`, the ability the policy
+     *     already exposes for exactly this kind of elevated visibility, rather
+     *     than inventing a second moderator test.
+     */
+    public function locationHiddenFrom(?User $viewer): bool
+    {
+        $profile = $this->relationLoaded('contributorProfile')
+            ? $this->getRelation('contributorProfile')
+            : $this->contributorProfile()->first();
+
+        if ($profile === null || $profile->shows_location_on_spots !== false) {
+            return false;
+        }
+
+        if ($viewer === null) {
+            return true;
+        }
+
+        return $viewer->id !== $this->user_id && ! $viewer->can('viewAnyDraft', self::class);
+    }
+
+    /**
+     * Drop spots whose contributor hid their location, unless `$viewer` is
+     * entitled to see them.
+     *
+     * This is the half that is easy to leave out, and leaving it out makes the
+     * rest decorative: membership of a radius result IS a position. A row that
+     * carries no `latitude` but still answers "is this spot within 2 km of
+     * here?" discloses the same fact in three requests instead of one.
+     *
+     * @param  Builder<Spot>  $query
+     * @return Builder<Spot>
+     */
+    public function scopeWithLocationVisibleTo(Builder $query, ?User $viewer): Builder
+    {
+        if ($viewer !== null && $viewer->can('viewAnyDraft', self::class)) {
+            return $query;
+        }
+
+        return $query->where(fn (Builder $scoped) => $scoped
+            ->when($viewer !== null, fn (Builder $q) => $q->orWhere('user_id', $viewer->id))
+            ->orWhereNotExists(fn ($sub) => $sub
+                ->selectRaw('1')
+                ->from('sto_explorer_profiles')
+                ->whereColumn('sto_explorer_profiles.user_id', 'sto_spots.user_id')
+                ->where('sto_explorer_profiles.shows_location_on_spots', false)));
     }
 
     public function city(): BelongsTo

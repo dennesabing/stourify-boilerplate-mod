@@ -122,6 +122,12 @@ class SpotApiController extends Controller
             ->published()
             ->nearby($latitude, $longitude, $radiusKm)
             ->whereNotIn('user_id', Block::hiddenUserIdsFor($request->user()))
+            // Membership of a radius result IS a position. Withholding the two
+            // coordinate keys from the payload while still answering "is this
+            // spot within 2 km of here?" discloses the same fact in three
+            // requests instead of one, so a hidden spot leaves the result
+            // entirely rather than losing its distance (STOURIFY-185).
+            ->withLocationVisibleTo($request->user())
             ->with(['city', 'user', 'media', 'tags'])
             ->paginate($perPage));
 
