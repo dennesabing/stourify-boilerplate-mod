@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A contributor who hides the location of their spots is now actually hidden** (STOURIFY-185).
+
+  `shows_location_on_spots` was a curtain rail with no curtain. The runners slid — the column was
+  accepted by the API, cast on the model, returned to its owner and copied to every device — and
+  **nothing read it**, so every caller received exact coordinates regardless.
+
+  A spot's position now disappears from every response a non-owner can reach. The keys are
+  **absent**, not blurred and not null: rounding to a coarse grid is a lie the client cannot detect,
+  because the response still looks like a position, so the app draws a pin somewhere plausible and
+  wrong while the user believes it is hidden.
+
+  The half that is easy to miss: a hidden spot **leaves the nearby result entirely**, rather than
+  merely losing its `distance_km`. Membership of a radius result *is* a position — a row that
+  answers "is this spot within 2 km of here?" gives up the same fact in three requests instead of
+  one. The consequence is real and deliberate: hiding your location makes your spots undiscoverable
+  by proximity. They still appear in Discover, in search, on your profile and by direct link.
+
+  A contributor always sees their own coordinates, and so does a moderator — a report about a spot is
+  frequently a report about where it is. A contributor with no profile row at all still shows
+  location, because the flag defaults to on and treating absence as "hidden" would have stripped most
+  of the catalogue.
+
+  Nothing user-visible changes yet: the flag defaults to on and there is still no control for it.
+  The toggle is STOURIFY-186 and is deliberately held until STOURIFY-187 closes the last leak — the
+  offline sync delta still ships coordinates to every device, and cannot stop until the app's local
+  database accepts a spot with no position.
+
+
 ## [0.11.0] - 2026-08-25
 
 ### Added
