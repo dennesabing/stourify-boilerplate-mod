@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A list draws a 96-pixel square; the originals run to megabytes each, so a list of twenty would
   have pulled tens of megabytes over a phone connection to show a column of thumbnails.
 
+- **The spot list can be narrowed to one category** (STOURIFY-193).
+
+  `GET /spots` now accepts a `category` parameter and returns only spots filed under it. A spot in
+  several categories answers to any of them.
+
+  It is deliberately not restricted to a fixed list of categories. Spots are created with free-text
+  categories, so a list here would reject values the same server accepted when the spot was written.
+  The app owns the vocabulary; this accepts what the app produces.
+
+  The filter runs on a query already narrowed to what the caller may see, so it can only narrow
+  further — filtering by category cannot surface another explorer's draft.
+
 ### Fixed
 
 - **Building a photo's web address no longer fetches its owner back from the database.**
