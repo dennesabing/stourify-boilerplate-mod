@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The search controller no longer claims production runs Meilisearch** (STOURIFY-204).
+
+  Its documentation said "Meilisearch in production, the collection driver in tests". Production has
+  never run Meilisearch — no such process, nothing on its port, no setting in the environment. The
+  sentence described an arrangement that was never set up, which is how someone loses an afternoon
+  debugging an index that is not there.
+
+  Every tier runs the collection driver, and that is now a recorded decision rather than an
+  accident, with the trade-off and the conditions for revisiting it written down.
+
 - **Building a photo's web address no longer fetches its owner back from the database.**
 
   Storage paths here are organisation-scoped and built from whatever the photo hangs off, so asking
