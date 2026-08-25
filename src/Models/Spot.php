@@ -298,6 +298,50 @@ class Spot extends Model implements HasMedia
             );
     }
 
+    /**
+     * The one photo that stands for this spot in a list, as a URL — or `null`.
+     *
+     * This is not a stored column. It exists because the offline sync speaks in
+     * flat rows of columns, and a spot's photos live in a separate table it does
+     * not carry. Without it the app's own "My spots" list could only ever draw
+     * grey rectangles: it reads the local database, and the local database had
+     * no photo in it to read (STOURIFY-192).
+     *
+     * The thumbnail is preferred over the full image deliberately. A list draws
+     * a 96-pixel square; the originals here run to two megabytes each, and a
+     * list of twenty would pull forty megabytes over a phone connection to show
+     * a column of thumbnails. Where no thumbnail was generated the full image is
+     * better than a blank, so it falls back rather than giving up.
+     *
+     * Callers must eager-load `media` — `SyncRegistry::eagerLoad()` does, for
+     * exactly this reason. Reading it off an unloaded model is a query per spot.
+     */
+    public function getCoverPhotoUrlAttribute(): ?string
+    {
+        $media = $this->getMedia('attachments')->first();
+
+        if ($media === null) {
+            return null;
+        }
+
+        // Hand the photo its own host back before asking for a URL.
+        //
+        // Storage paths here are organisation-scoped and built from the model
+        // the photo hangs off (`SpacesPathGenerator`), so building a URL reads
+        // `$media->model` -- and on a photo that arrived through an eager load,
+        // that relation is not loaded and fetches the spot back from the
+        // database. One query per photo, and each spot fetched that way then
+        // pulls its own contributor profile, so it is two.
+        //
+        // We are that spot. Saying so costs nothing and removes both queries.
+        // Measured on a delta of ten spots: 33 queries before, 13 after.
+        $media->setRelation('model', $this);
+
+        return $media->hasGeneratedConversion('thumb')
+            ? $media->getUrl('thumb')
+            : $media->getUrl();
+    }
+
     public function searchableAs(): string
     {
         return 'sto_spots';

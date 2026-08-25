@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The offline sync now carries a spot's photo down to the phone** (STOURIFY-192).
+
+  A spot's photos live in a separate table from the spot itself, and the sync speaks in flat rows
+  of columns — so the phone received every fact about a spot except what it looks like. The app's
+  own "My spots" list could only ever draw grey rectangles, which reads as a broken image rather
+  than as a missing feature.
+
+  Spot rows in the sync now carry `cover_photo_url`, preferring the thumbnail over the full image.
+  A list draws a 96-pixel square; the originals run to megabytes each, so a list of twenty would
+  have pulled tens of megabytes over a phone connection to show a column of thumbnails.
+
+### Fixed
+
+- **Building a photo's web address no longer fetches its owner back from the database.**
+
+  Storage paths here are organisation-scoped and built from whatever the photo hangs off, so asking
+  a photo for its address quietly loaded that record again — one query per photo, and each record
+  loaded that way pulled its own contributor profile, making it two. It went unnoticed because it
+  only shows up where many photos are handled at once, which until now was nowhere.
+
+  A sync of ten spots with photos cost 33 queries and now costs 13, and the count no longer grows
+  with the number of spots.
+
+  Note this was only ever *reached* by the change above; the cause is older and lives in the
+  boilerplate's path generator. Other places that build many photo addresses at once may still pay
+  it — see the follow-up card.
+
 ## [0.11.1] - 2026-08-25
 
 ### Fixed

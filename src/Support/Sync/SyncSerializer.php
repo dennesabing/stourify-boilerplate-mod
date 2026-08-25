@@ -36,6 +36,12 @@ final class SyncSerializer
             'title', 'slug', 'description', 'latitude', 'longitude', 'address',
             'categories', 'hours', 'status', 'is_verified',
             'rating_average', 'reviews_count', 'saves_count',
+            // Not a stored column -- an accessor on the model. The delta speaks
+            // in flat rows and a spot's photos live in another table, so without
+            // this the app's own list of its spots has no picture to draw
+            // (STOURIFY-192). Requires `media` eager-loaded; `SyncRegistry::eagerLoad()`
+            // does it, and reading it off an unloaded model is a query per spot.
+            'cover_photo_url',
             'created_at', 'updated_at', 'deleted_at',
         ],
         'sto_reviews' => [

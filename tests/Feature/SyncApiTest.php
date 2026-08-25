@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -224,8 +226,109 @@ test('a serialized row carries an integer id and FKs, a uuid, JSON columns as ar
             'title', 'slug', 'description', 'latitude', 'longitude', 'address',
             'categories', 'hours', 'status', 'is_verified',
             'rating_average', 'reviews_count', 'saves_count',
+            // Not a stored column -- an accessor -- but on the wire like any
+            // other, which is the only thing this assertion is about (STOURIFY-192).
+            'cover_photo_url',
             'created_at', 'updated_at', 'deleted_at',
         ]);
+});
+
+/**
+ * The spot's photo has to reach the device, or the app's own list of its spots
+ * can only draw grey rectangles (STOURIFY-192).
+ *
+ * The delta speaks in flat rows of columns and a spot's photos live in a
+ * separate table, so this column is an accessor rather than something stored.
+ * These cases pin what it resolves to, because "there is no photo" and "the
+ * photo did not come through" look identical on a phone and only one is a bug.
+ */
+test('the delta carries a spot photo, preferring the thumbnail over the full image', function (): void {
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+    ]);
+
+    $spot->addMedia(UploadedFile::fake()->image('photo.jpg', 800, 800))
+        ->toMediaCollection('attachments');
+
+    actingAsSyncer($this->explorer);
+    $row = collect($this->getJson(deltaUrl(), orgHeader($this->organization))->assertOk()->json('sto_spots.created'))
+        ->firstWhere('uuid', $spot->uuid);
+
+    expect($row['cover_photo_url'])->toBeString()
+        ->and($row['cover_photo_url'])->not->toBe('');
+
+    // A list draws a 96-pixel square. The originals here run to megabytes, so a
+    // list of twenty would pull tens of megabytes over a phone connection to
+    // show a column of thumbnails.
+    expect($row['cover_photo_url'])->toContain('thumb');
+});
+
+test('a spot with no photo carries null rather than an empty string or a missing key', function (): void {
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+    ]);
+
+    actingAsSyncer($this->explorer);
+    $row = collect($this->getJson(deltaUrl(), orgHeader($this->organization))->assertOk()->json('sto_spots.created'))
+        ->firstWhere('uuid', $spot->uuid);
+
+    // The key is always present -- the device's schema declares the column, and
+    // a row that simply omitted it would leave whatever was there before.
+    expect($row)->toHaveKey('cover_photo_url')
+        ->and($row['cover_photo_url'])->toBeNull();
+});
+
+/**
+ * The reason `SyncRegistry::eagerLoad()` exists.
+ *
+ * A delta fetches every changed row at once and then serialises them one by
+ * one, so a column that reads a RELATION costs a query per row unless it was
+ * loaded up front. Without the eager load, a hundred spots is a hundred and one
+ * queries -- and the cost lands on the sync path, which is the least observed
+ * part of the product and the last place anyone would look.
+ */
+test('the delta does not run one query per spot to find its photo', function (): void {
+    $makeSpotWithPhoto = function (int $i): void {
+        $spot = Spot::factory()->for($this->organization)->create([
+            'user_id' => $this->explorer->id,
+            'status' => SpotStatus::Published,
+        ]);
+
+        $spot->addMedia(UploadedFile::fake()->image("photo{$i}.jpg", 200, 200))
+            ->toMediaCollection('attachments');
+    };
+
+    foreach (range(1, 5) as $i) {
+        $makeSpotWithPhoto($i);
+    }
+
+    actingAsSyncer($this->explorer);
+
+    $queries = 0;
+    DB::listen(function () use (&$queries): void {
+        $queries++;
+    });
+
+    $this->getJson(deltaUrl(), orgHeader($this->organization))->assertOk();
+    $withFive = $queries;
+
+    // Five more spots, each with its own photo. Fetched per spot, this second
+    // delta would cost roughly five more queries than the first. Eager-loaded,
+    // it costs the same handful either way.
+    foreach (range(6, 10) as $i) {
+        $makeSpotWithPhoto($i);
+    }
+
+    $queries = 0;
+    $this->getJson(deltaUrl(), orgHeader($this->organization))->assertOk();
+
+    // Measured while writing this: 33 queries for ten spots before the fix,
+    // 13 after, and flat as spots are added. The assertion is the SHAPE rather
+    // than the number -- a count pinned to 13 would fail on any unrelated
+    // change and teach the next person to raise the ceiling.
+    expect($queries)->toBeLessThanOrEqual($withFive);
 });
 
 // ---------------------------------------------------------------------------
