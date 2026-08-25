@@ -227,6 +227,13 @@ class SpotApiController extends Controller
             ->when(! empty($filters['city_uuid']), fn (Builder $q) => $q->whereHas(
                 'city', fn (Builder $city) => $city->where('uuid', $filters['city_uuid'])
             ))
+            // One category's spots (STOURIFY-193). `categories` is a JSON list
+            // on the spot rather than a table, so this asks whether the list
+            // CONTAINS the value -- not whether it equals it. A spot tagged
+            // both Coast and Nature must answer to either.
+            ->when(! empty($filters['category']), fn (Builder $q) => $q->whereJsonContains(
+                'categories', $filters['category']
+            ))
             // One hashtag's spots. This runs on a query `visibleTo()` has
             // already scoped, so it can only ever narrow — a tag listing cannot
             // surface another explorer's draft (STOURIFY-172).

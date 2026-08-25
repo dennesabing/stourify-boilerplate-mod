@@ -31,9 +31,28 @@ use Modules\Stourify\Support\Hashtags\HashtagParser;
  * result the Discover screen needs.
  *
  * `type` returns one paginated result set for its tab; omitting it returns a
- * small preview of all three for the "All" tab. Search runs through Scout
- * (Meilisearch in production, the collection driver in tests), org-scoped by
- * `OrganizationSearchable`.
+ * small preview of all three for the "All" tab. Search runs through Scout,
+ * org-scoped by `OrganizationSearchable`.
+ *
+ * **Which Scout engine, and why it is worth knowing.** This said "Meilisearch in
+ * production, the collection driver in tests" until STOURIFY-204. Production has
+ * never run Meilisearch — no such process, nothing on its port, no setting in
+ * the environment — so the sentence described an arrangement that was never set
+ * up, which is how somebody loses an afternoon debugging an index that is not
+ * there. Every tier runs the **collection driver**, and the operator decided on
+ * 2026-08-26 to keep it for now.
+ *
+ * That decision has a shape worth understanding before changing anything here.
+ * A real search engine keeps its own index, the way a book's index maps a word
+ * to its pages, so its cost barely moves as the book grows. The collection
+ * driver has no index: it reads the rows and checks each one, the way you would
+ * find a word by reading every page. On today's catalogue that is instant. It
+ * slows in direct proportion to how much content exists, and it cannot do the
+ * things an index makes cheap — tolerating a typo, matching "beaches" to
+ * "beach", ranking by relevance.
+ *
+ * So this is a deliberate deferral, not an oversight, and STOURIFY-204 carries
+ * the reasoning and the conditions for revisiting it.
  *
  * Only *discoverable* spots are returned — a search is a discovery surface, so
  * a draft never appears, the same rule the map and the nearby list follow.

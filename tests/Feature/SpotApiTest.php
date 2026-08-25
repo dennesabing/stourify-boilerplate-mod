@@ -622,3 +622,92 @@ test('creating a spot is denied without the create permission, whatever the payl
 
     expect(Spot::query()->count())->toBe($before);
 });
+
+/**
+ * The Discover filter rail (STOURIFY-193).
+ *
+ * These chips were decorative for a reason worth remembering: Laravel drops a
+ * query parameter nothing has validated, so a filter built without a rule
+ * returns the unfiltered list while LOOKING like it filtered. The first case
+ * below is really a test of the validation rule, and would have passed against
+ * the broken version too -- which is why the second and third exist.
+ */
+test('the spot list can be narrowed to one category', function (): void {
+    $coast = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+        'categories' => ['Coast', 'Nature'],
+    ]);
+
+    $food = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+        'categories' => ['Foodie'],
+    ]);
+
+    Sanctum::actingAs($this->explorer);
+
+    $uuids = collect($this->getJson('/api/v1/spots?category=Coast', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data'))
+        ->pluck('uuid');
+
+    // Present is only half the claim. A filter that returns everything also
+    // contains the spot you asked for.
+    expect($uuids)->toContain($coast->uuid)
+        ->and($uuids)->not->toContain($food->uuid);
+});
+
+test('a spot in several categories answers to any of them', function (): void {
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+        'categories' => ['Coast', 'Nature'],
+    ]);
+
+    Sanctum::actingAs($this->explorer);
+
+    foreach (['Coast', 'Nature'] as $category) {
+        expect(collect($this->getJson("/api/v1/spots?category={$category}", orgHeader($this->organization))
+            ->assertOk()
+            ->json('data'))->pluck('uuid'))
+            ->toContain($spot->uuid);
+    }
+});
+
+test('a category nothing is filed under returns nothing, rather than everything', function (): void {
+    Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+        'categories' => ['Coast'],
+    ]);
+
+    Sanctum::actingAs($this->explorer);
+
+    // The exact failure a dropped parameter produces: ask for something no spot
+    // has, and get the whole list back.
+    expect($this->getJson('/api/v1/spots?category=Nightlife', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data'))
+        ->toBeEmpty();
+});
+
+test('filtering by category does not surface another explorer\'s draft', function (): void {
+    $stranger = User::factory()->create();
+
+    $draft = Spot::factory()->for($this->organization)->create([
+        'user_id' => $stranger->id,
+        'status' => SpotStatus::Draft,
+        'categories' => ['Coast'],
+    ]);
+
+    Sanctum::actingAs($this->explorer);
+
+    // The category filter runs on a query already scoped to what this caller
+    // may see, so it can only ever narrow. Pinned because a filter applied
+    // before that scope would widen it, and nothing else here would notice.
+    expect(collect($this->getJson('/api/v1/spots?category=Coast', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data'))->pluck('uuid'))
+        ->not->toContain($draft->uuid);
+});

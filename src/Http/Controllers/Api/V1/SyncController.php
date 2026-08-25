@@ -132,7 +132,7 @@ class SyncController extends Controller
         $modelClass = SyncRegistry::model($table);
 
         if ($since === null) {
-            $created = SyncRegistry::scope($table, $modelClass::query(), $user)->get();
+            $created = SyncRegistry::scope($table, $modelClass::query()->with(SyncRegistry::eagerLoad($table)), $user)->get();
 
             return [
                 'created' => $this->serializeAll($table, $created),
@@ -141,11 +141,11 @@ class SyncController extends Controller
             ];
         }
 
-        $created = SyncRegistry::scope($table, $modelClass::query(), $user)
+        $created = SyncRegistry::scope($table, $modelClass::query()->with(SyncRegistry::eagerLoad($table)), $user)
             ->where('created_at', '>', $since)
             ->get();
 
-        $updated = SyncRegistry::scope($table, $modelClass::query(), $user)
+        $updated = SyncRegistry::scope($table, $modelClass::query()->with(SyncRegistry::eagerLoad($table)), $user)
             ->where('updated_at', '>', $since)
             ->where('created_at', '<=', $since)
             ->get();
@@ -449,7 +449,7 @@ class SyncController extends Controller
         $modelClass = SyncRegistry::model($table);
 
         try {
-            $model = SyncRegistry::scope($table, $modelClass::query(), $user)->where('uuid', $uuid)->first();
+            $model = SyncRegistry::scope($table, $modelClass::query()->with(SyncRegistry::eagerLoad($table)), $user)->where('uuid', $uuid)->first();
 
             if ($model === null) {
                 // Already gone — deleting is idempotent, spec §4 point 2.

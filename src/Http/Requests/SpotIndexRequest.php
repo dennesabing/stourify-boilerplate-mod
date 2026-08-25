@@ -47,6 +47,23 @@ class SpotIndexRequest extends BaseFormRequest
             'city_uuid' => ['nullable', 'uuid'],
             'mine' => ['nullable', 'boolean'],
 
+            // One category's spots, for the Discover filter rail (STOURIFY-193).
+            //
+            // This rule is the whole reason the rail could not be wired up
+            // before. Laravel drops a query parameter nothing has validated,
+            // silently and without complaint -- so a filter built against a
+            // rule that does not exist returns the UNFILTERED list every time,
+            // and looks exactly like a filter that works. The app's own comment
+            // on those chips said as much and left them decorative rather than
+            // shipping something that lies.
+            //
+            // Not constrained to a fixed list on purpose: `SpotStoreRequest`
+            // takes free strings, so the server has no vocabulary to check
+            // against and inventing one here would reject categories the same
+            // server accepted when the spot was created. The app offers a
+            // shortlist; this accepts what that shortlist produces.
+            'category' => ['nullable', 'string', 'max:64'],
+
             // One hashtag's spots (STOURIFY-172). A slug, capped at the
             // parser's own length. See PostIndexRequest for why there is no
             // pattern rule beyond that.

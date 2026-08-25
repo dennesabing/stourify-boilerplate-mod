@@ -68,6 +68,29 @@ final class SyncRegistry
     }
 
     /**
+     * Relations a delta query for this table must load up front.
+     *
+     * A delta fetches every changed row at once and then serialises them one by
+     * one. Anything a serialised row reads from a RELATION is therefore a query
+     * per row unless it was loaded in advance — a hundred spots become a hundred
+     * and one queries, and the cost lands on the sync path, which is the least
+     * observed part of the product.
+     *
+     * `sto_spots` carries `cover_photo_url`, which reads the spot's media, so
+     * that is what this exists for (STOURIFY-192). Everything else loads nothing
+     * and gets an empty list.
+     *
+     * @return list<string>
+     */
+    public static function eagerLoad(string $table): array
+    {
+        return match ($table) {
+            'sto_spots' => ['media'],
+            default => [],
+        };
+    }
+
+    /**
      * Restrict a query for this table to what the caller's delta/push may see.
      *
      * Mirrors spec §2's scope column: owned tables are scoped to the caller,
