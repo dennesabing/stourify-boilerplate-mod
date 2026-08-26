@@ -24,6 +24,9 @@ use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Report;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Listeners\TouchSpotWhenItsPhotosChange;
+use Spatie\MediaLibrary\Conversions\Events\ConversionHasBeenCompletedEvent;
+use Spatie\MediaLibrary\MediaCollections\Events\MediaHasBeenAddedEvent;
 use Modules\Stourify\Models\SpotAbout;
 use Modules\Stourify\Models\WishlistItem;
 use Modules\Stourify\Observers\HashtagObserver;
@@ -123,6 +126,15 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         // job erases it. The boilerplate announces the deletion; deciding what
         // it means for sto_* tables is this module's job, not the platform's.
         Event::listen(UserDeleted::class, RemoveExplorerContentOnUserDeleted::class);
+
+        // A spot's photos live in another table, and the offline sync only
+        // resends a row whose `updated_at` moved -- so without this, a photo
+        // attached seconds after the spot was created never reaches the device
+        // at all. Not late: never. See TouchSpotWhenItsPhotosChange
+        // (STOURIFY-208), which is why STOURIFY-192 did not work on a handset.
+        Event::listen(MediaHasBeenAddedEvent::class, [TouchSpotWhenItsPhotosChange::class, 'onMediaAdded']);
+        Event::listen(ConversionHasBeenCompletedEvent::class, [TouchSpotWhenItsPhotosChange::class, 'onConversionCompleted']);
+        Media::deleted(fn (Media $media) => app(TouchSpotWhenItsPhotosChange::class)->onMediaDeleted($media));
 
         // Records one tombstone per delete — hard (Follow, WishlistItem) and
         // soft (Spot, Review, City) alike — so the offline-sync delta can

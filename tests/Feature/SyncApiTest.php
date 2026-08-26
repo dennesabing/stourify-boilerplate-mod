@@ -331,6 +331,88 @@ test('the delta does not run one query per spot to find its photo', function ():
     expect($queries)->toBeLessThanOrEqual($withFive);
 });
 
+/**
+ * A photo has to make the spot look CHANGED, or the sync never delivers it
+ * (STOURIFY-208).
+ *
+ * This is the half STOURIFY-192 was missing, and it is invisible from the
+ * server's side: `cover_photo_url` was computed perfectly and simply never
+ * travelled. The delta only resends a row whose `updated_at` moved, and a spot
+ * gains its photos a second or two AFTER it is created — so without this the
+ * row is never sent again. Not late. Never.
+ *
+ * These assert on the timestamp rather than on the URL, deliberately. Asserting
+ * that a freshly-fetched spot carries a cover URL passes with or without the
+ * fix, because a full fetch reads the media table directly. The delta is the
+ * thing that was broken, and `updated_at` is what the delta reads.
+ */
+test('attaching a photo marks the spot as changed', function (): void {
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+    ]);
+
+    $before = $spot->updated_at;
+
+    // A second of daylight between the two, so the comparison is about the
+    // touch and not about clock resolution.
+    $this->travel(2)->seconds();
+
+    $spot->addMedia(UploadedFile::fake()->image('photo.jpg', 200, 200))
+        ->toMediaCollection('attachments');
+
+    expect($spot->fresh()->updated_at->gt($before))->toBeTrue();
+});
+
+test('a spot whose photo arrives after the cursor still reaches the device', function (): void {
+    // The exact sequence every spot in this app goes through, and the one that
+    // was broken: create, sync, THEN upload the photo.
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+    ]);
+
+    actingAsSyncer($this->explorer);
+
+    // The device pulls, and correctly learns the spot has no photo yet.
+    $cursor = now();
+    $this->travel(2)->seconds();
+
+    $spot->addMedia(UploadedFile::fake()->image('photo.jpg', 200, 200))
+        ->toMediaCollection('attachments');
+
+    $this->travel(2)->seconds();
+
+    // A later delta, asked from that cursor, must carry the spot again.
+    $delta = $this->getJson(deltaUrl($cursor->toIso8601String()), orgHeader($this->organization))
+        ->assertOk()
+        ->json('sto_spots');
+
+    $rows = collect([...($delta['created'] ?? []), ...($delta['updated'] ?? [])]);
+    $row = $rows->firstWhere('uuid', $spot->uuid);
+
+    expect($row)->not->toBeNull('the spot never came back down, so its photo never reaches the device');
+    expect($row['cover_photo_url'])->toBeString();
+});
+
+test('removing a spot photo marks the spot as changed too', function (): void {
+    // Otherwise a device goes on showing a picture of something that is gone.
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->explorer->id,
+        'status' => SpotStatus::Published,
+    ]);
+
+    $spot->addMedia(UploadedFile::fake()->image('photo.jpg', 200, 200))
+        ->toMediaCollection('attachments');
+
+    $before = $spot->fresh()->updated_at;
+    $this->travel(2)->seconds();
+
+    $spot->getMedia('attachments')->first()->delete();
+
+    expect($spot->fresh()->updated_at->gt($before))->toBeTrue();
+});
+
 // ---------------------------------------------------------------------------
 // Push — create + idempotency
 // ---------------------------------------------------------------------------
