@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A spot's photo now actually reaches the phone** (STOURIFY-208).
+
+  Spot rows were taught to carry a photo to the device in 0.12.0, and the photo never arrived. The
+  offline sync only sends down a row whose "last changed" time has moved, and **attaching a photo
+  did not change the spot** — photos live in a separate table.
+
+  That is the exact sequence every spot in this app goes through: the spot is written, the phone
+  fetches it (correctly, with no photo yet), and the photos upload a second or two later without
+  moving the timestamp. The row was then never sent again — not late, never, because there was no
+  future moment at which it became newer than what the phone had already asked for.
+
+  A spot's photos changing now counts as the spot changing. It listens for three things rather than
+  one: the upload, the thumbnail finishing, and a photo being removed. The middle one is the one
+  that matters — the thumbnail is generated after the upload, so a fix that fired only on upload
+  would have shipped the full-size original once and never corrected it.
+
 ## [0.12.0] - 2026-08-26
 
 ### Added
