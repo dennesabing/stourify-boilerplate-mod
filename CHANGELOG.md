@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Spots read from the cache come back as spots again, instead of 500-ing the request**
+  (STOURIFY-216).
+
+  A cache is a coat check: you hand an object over and later a ticket brings it back. PHP adds a
+  rule to that — it rebuilds a stored object only if the object's class is on a guest list, so that
+  whoever can write into the cache cannot name any of the several hundred classes in `vendor/` and
+  have PHP run that class's start-up code. The platform builds that guest list by asking every
+  switched-on module for its own names. **This module never answered.**
+
+  So ten of its models were being written into the cache and refused on the way out. Refusal is
+  silent — PHP does not throw, it hands back an object-shaped hole that survives every `try`/`catch`
+  and only explodes later, somewhere else, on the first property read. `GET /api/v1/spots` answered
+  its very first request from the database and returned a 500 on every request after it, on any tier
+  with a real cache store. The module now publishes `Block`, `City`, `ExplorerProfile`, `Follow`,
+  `Post`, `Report`, `Review`, `Spot`, `SpotAbout` and `WishlistItem` through
+  `StourifyModule::serializableCacheClasses()`. `SyncTombstone` is deliberately left out: it is
+  write-once and read by cursor, so nothing ever caches one.
+
+  It also un-blocks every backend card. The platform's drift guard,
+  `Tests\Feature\Cache\SerializableClassCoverageTest`, had been failing on `master` for exactly this
+  reason, which meant the backend gate was red no matter what a card changed.
+
+### Added
+
+- **A test that keeps the published list honest as models are added** (STOURIFY-216).
+
+  `tests/Feature/SerializableCacheClassesTest.php` scans this module for classes that use the
+  `Cacheable` trait and fails in both directions — a cacheable model missing from the published
+  list, and a name on the list that no longer earns its place. The platform has its own version of
+  this check and it works; this one exists because it lives in the repository the person adding the
+  eleventh model is actually looking at.
+
 ## [0.12.1] - 2026-08-26
 
 ### Fixed

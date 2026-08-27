@@ -13,9 +13,16 @@ use Illuminate\Http\Request;
 use Modules\Stourify\Database\Seeders\StourifyDemoContentSeeder;
 use Modules\Stourify\Database\Seeders\StourifyExplorerBackfillSeeder;
 use Modules\Stourify\Database\Seeders\StourifyPublicOrganizationSeeder;
+use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
+use Modules\Stourify\Models\Follow;
+use Modules\Stourify\Models\Post;
+use Modules\Stourify\Models\Report;
+use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Models\SpotAbout;
+use Modules\Stourify\Models\WishlistItem;
 
 /**
  * Stourify — the local spot discovery domain.
@@ -186,6 +193,54 @@ class StourifyModule implements Module
             Spot::class,
             City::class,
             ExplorerProfile::class,
+        ];
+    }
+
+    /**
+     * The classes PHP is allowed to rebuild when this module's cached values
+     * are read back.
+     *
+     * A cache is a coat check: you hand an object over, and later a ticket
+     * brings it back. PHP adds a rule to that — it rebuilds a stored object
+     * only if the object's class is on a guest list, so that whoever can write
+     * into the cache cannot name any class in `vendor/` and have PHP run that
+     * class's start-up code on the way out.
+     *
+     * The platform composes the guest list by asking every switched-on module
+     * this question and merging the answers, which is why no `Modules\…` name
+     * appears anywhere in `saas-boilerplate`. It is an optional method found by
+     * name rather than a method on the `Module` interface, so adding it here
+     * obliges no other module to change.
+     *
+     * **A missing name fails silently, which is the whole reason this exists.**
+     * PHP does not throw when it refuses a class. It returns a
+     * `__PHP_Incomplete_Class`, which looks like an object, survives every
+     * `try`/`catch` on the way out, and explodes later in unrelated code on the
+     * first property read. Until this method was declared, `GET /api/v1/spots`
+     * answered its first request from the database and then returned a 500 on
+     * every cached request after it (STOURIFY-216).
+     *
+     * Only models that actually use the `Cacheable` trait belong here.
+     * `SyncTombstone` is deliberately absent: it is write-once and read by
+     * cursor, so nothing ever caches one. `tests/Feature/SerializableCacheClassesTest.php`
+     * fails in both directions — a cacheable model missing from this list, and
+     * a name here that no longer earns its place.
+     *
+     * @return array<int, class-string<Model>>
+     */
+    public function serializableCacheClasses(): array
+    {
+        return [
+            Block::class,
+            City::class,
+            ExplorerProfile::class,
+            Follow::class,
+            Post::class,
+            Report::class,
+            Review::class,
+            Spot::class,
+            SpotAbout::class,
+            WishlistItem::class,
         ];
     }
 
