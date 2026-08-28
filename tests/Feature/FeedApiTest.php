@@ -340,3 +340,46 @@ test('the feed is denied without the posts view permission', function (): void {
 
     $this->getJson('/api/v1/feed', orgHeader($this->organization))->assertForbidden();
 });
+
+// ---------------------------------------------------------------------------
+// A refusal has to say which refusal it is (STOURIFY-228)
+// ---------------------------------------------------------------------------
+//
+// Two very different things both used to answer with the same sentence, "This
+// action is unauthorized." One is an account that was never enrolled in an
+// organization at all — a provisioning fault nobody chose. The other is an
+// account that is properly enrolled but is not allowed to read posts here.
+// The app cannot act sensibly on either until it can tell them apart, so each
+// now carries its own `code`.
+
+test('an account belonging to no organization is told that is the problem', function (): void {
+    // Straight from the factory: no organization row, no membership, no role.
+    // This is what a seeder- or factory-made account looks like, and what an
+    // account looks like if it registered while the public organization was
+    // missing.
+    actingAsFeedUser(User::factory()->create());
+
+    $this->getJson('/api/v1/feed')
+        ->assertForbidden()
+        ->assertJsonPath('code', 'NO_ORGANIZATION')
+        ->assertJsonPath('status', 403);
+});
+
+test('a member of an organization who may not read posts is told that instead', function (): void {
+    actingAsFeedUser($this->createUserWithPermissions($this->organization, []));
+
+    $this->getJson('/api/v1/feed', orgHeader($this->organization))
+        ->assertForbidden()
+        ->assertJsonPath('code', 'FEED_ACCESS_DENIED')
+        ->assertJsonPath('status', 403);
+});
+
+test('naming the refusal did not narrow who is let in', function (): void {
+    $post = publishedPost($this->organization, $this->author, $this->spot, '2026-07-11 09:00:00');
+
+    actingAsFeedUser($this->viewer);
+
+    $this->getJson('/api/v1/feed', orgHeader($this->organization))
+        ->assertOk()
+        ->assertJsonPath('data.0.uuid', $post->uuid);
+});
