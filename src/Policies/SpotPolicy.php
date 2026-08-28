@@ -8,7 +8,7 @@ use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Enums\SpotStatus;
 use Modules\Stourify\Models\Spot;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use Modules\Stourify\Support\AuthorizationMemo;
 
 /**
  * Authorization for spots.
@@ -136,23 +136,23 @@ class SpotPolicy
         return in_array($spot->status->value, SpotStatus::discoverable(), true);
     }
 
+    /**
+     * Both of these go through AuthorizationMemo, which answers a repeated
+     * question from memory for the length of one request. A page that renders
+     * many rows asks the same thing about the same viewer once per row, and
+     * working it out is expensive — see that class for the measurement.
+     *
+     * A permission the module declares but that has not been synced into the
+     * database yet must deny, not explode. The memo keeps that behaviour.
+     */
     private function isModerator(User $user): bool
     {
-        return $user->hasAnyRole(self::OVERRIDE_ROLES)
+        return AuthorizationMemo::holdsAnyRole($user, self::OVERRIDE_ROLES)
             || $this->allows($user, 'stourify.spots.manage');
     }
 
-    /**
-     * A permission the module declares but that has not been synced into the
-     * database yet must deny, not explode — `hasPermissionTo()` throws rather
-     * than returning false for an unknown name.
-     */
     private function allows(User $user, string $permission): bool
     {
-        try {
-            return $user->hasPermissionTo($permission);
-        } catch (PermissionDoesNotExist) {
-            return false;
-        }
+        return AuthorizationMemo::permits($user, $permission);
     }
 }

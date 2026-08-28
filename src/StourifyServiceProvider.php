@@ -12,10 +12,13 @@ use App\Providers\ModuleBaseServiceProvider;
 use App\Registries\LegalDocumentRegistry;
 use App\Registries\ModuleRegistry;
 use App\Support\LegalDocument;
+use Illuminate\Cache\Events\CacheFlushed;
+use Illuminate\Cache\Events\ForgettingKey;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Modules\Stourify\Listeners\JoinPublicOrganizationAsExplorer;
 use Modules\Stourify\Listeners\RemoveExplorerContentOnUserDeleted;
+use Modules\Stourify\Listeners\TouchSpotWhenItsPhotosChange;
 use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
@@ -24,9 +27,6 @@ use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Report;
 use Modules\Stourify\Models\Review;
 use Modules\Stourify\Models\Spot;
-use Modules\Stourify\Listeners\TouchSpotWhenItsPhotosChange;
-use Spatie\MediaLibrary\Conversions\Events\ConversionHasBeenCompletedEvent;
-use Spatie\MediaLibrary\MediaCollections\Events\MediaHasBeenAddedEvent;
 use Modules\Stourify\Models\SpotAbout;
 use Modules\Stourify\Models\WishlistItem;
 use Modules\Stourify\Observers\HashtagObserver;
@@ -43,7 +43,10 @@ use Modules\Stourify\Policies\SpotAboutPolicy;
 use Modules\Stourify\Policies\SpotPolicy;
 use Modules\Stourify\Policies\StourifyMediaPolicy;
 use Modules\Stourify\Policies\WishlistItemPolicy;
+use Modules\Stourify\Support\AuthorizationMemo;
 use Modules\Stourify\Support\Sync\SyncRegistry;
+use Spatie\MediaLibrary\Conversions\Events\ConversionHasBeenCompletedEvent;
+use Spatie\MediaLibrary\MediaCollections\Events\MediaHasBeenAddedEvent;
 
 /**
  * Wires the Stourify module: routes, migrations, policies, morph aliases.
@@ -135,6 +138,36 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         Event::listen(MediaHasBeenAddedEvent::class, [TouchSpotWhenItsPhotosChange::class, 'onMediaAdded']);
         Event::listen(ConversionHasBeenCompletedEvent::class, [TouchSpotWhenItsPhotosChange::class, 'onConversionCompleted']);
         Media::deleted(fn (Media $media) => app(TouchSpotWhenItsPhotosChange::class)->onMediaDeleted($media));
+
+        // The policies remember a viewer's permission answers for the length
+        // of one request (AuthorizationMemo — it removed about 2.7 seconds
+        // from a feed page under STOURIFY-229). A memo is only safe if it
+        // stops being used the moment its answer could change, and access can
+        // change in two places. A grant or revoke ON THE USER is handled by
+        // the memo's own key and needs nothing here. This listener covers the
+        // other one: a permission added to or removed from a ROLE, which the
+        // user's own record cannot see, because their role list is unchanged.
+        //
+        // That is the case the permission library does announce — a role
+        // change ends by discarding the library's cache — so listen for the
+        // announcement rather than inventing a second signal somebody would
+        // have to keep in step.
+        //
+        // The event to listen for is `ForgettingKey`, the one raised before
+        // the attempt — not `KeyForgotten`, which is raised only when the key
+        // was actually there. Those differ exactly when the permission cache
+        // has not been filled yet, which is the ordinary state in a test: the
+        // change went through, no event was raised, and the memo kept
+        // answering with the old permission.
+        Event::listen(ForgettingKey::class, static function (ForgettingKey $event): void {
+            if ($event->key === config('permission.cache.key')) {
+                AuthorizationMemo::forget();
+            }
+        });
+
+        // A whole-store flush takes the permission cache with it and says
+        // nothing about individual keys, so it has to be caught separately.
+        Event::listen(CacheFlushed::class, static fn () => AuthorizationMemo::forget());
 
         // Records one tombstone per delete — hard (Follow, WishlistItem) and
         // soft (Spot, Review, City) alike — so the offline-sync delta can

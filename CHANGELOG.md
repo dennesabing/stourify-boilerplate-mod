@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A feed page no longer works the viewer's permissions out from scratch for every row on it
+  (STOURIFY-229).** The home feed took about seventeen seconds to build and the app gives up at
+  fifteen, so the first screen of the app was losing a race with its own deadline — on the fastest
+  network path there is, one machine calling itself. Measuring it before changing anything found two
+  costs and cleared every other suspect. About four of those seconds were the development server
+  rebuilding the framework for each request and belong to no endpoint. Of the feed's own thirteen,
+  **2.1 seconds were nine queries fetching each post back so its photo could work out its folder
+  name** — fixed in `saas-boilerplate`, see its changelog — and **2.7 seconds were the `can` block
+  on each row asking the same question about the same viewer, about ninety times, with no database
+  query involved at all**: five of a post's six abilities begin by asking whether the viewer is a
+  moderator, and answering "no" makes the permission library gather every permission of every role
+  they hold. It is a doorman walking to the office to re-read the staff list for every item a
+  visitor looks at. `PostPolicy` and `SpotPolicy` now go through
+  `Modules\Stourify\Support\AuthorizationMemo`, which answers a repeated question from memory for
+  the length of one request and no longer — an answer stops being reachable the moment the viewer's
+  grants change, and a change to a role's permissions empties it outright. Measured over loopback on
+  the same rig, same account, byte-identical response: **17.4 s and 24 queries before, 11.2 s and 15
+  queries after**, with the rendering step falling from 5.3 s to 1.7 s. The remaining gap is the
+  rig — the development server's per-request boot and a database on the other side of the network —
+  not the feed.
+
+  The check that guards it is a query and lookup count rather than a stopwatch, because the same
+  request timed 17.4 s, 15.4 s and 14.4 s within a minute of itself on this machine; a clock here
+  measures the machine. See `tests/Feature/FeedApiTest.php`.
+
 - **A refused feed now says which refusal it is** (STOURIFY-228).
 
   A library door that says only "not authorized" leaves you unable to tell whether your membership
