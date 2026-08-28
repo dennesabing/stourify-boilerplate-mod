@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A refused feed now says which refusal it is** (STOURIFY-228).
+
+  A library door that says only "not authorized" leaves you unable to tell whether your membership
+  was cancelled, whether you were banned, or whether the clerk simply forgot to write your name in
+  the book. `GET /api/v1/feed` was that door: every refusal answered with the one sentence "This
+  action is unauthorized.", so the app could not tell a misprovisioned account from a genuinely
+  forbidden one — and in STOURIFY-225 it guessed "the server is unreachable", sending someone
+  hunting a network fault that did not exist.
+
+  A refusal now uses the same `{ message, status, code }` body the platform already returns for
+  `ORGANIZATION_ACCESS_DENIED`, with `code` naming the cause: `NO_ORGANIZATION` when the request
+  resolved no organization at all — the account was never enrolled, which is a provisioning fault
+  rather than anything the person did — and `FEED_ACCESS_DENIED` when an organization did resolve
+  but the account may not read posts in it.
+
+  **The status stays 403, deliberately, rather than becoming an empty 200.** An empty feed is
+  exactly what a healthy new account who follows nobody sees, so answering that way would make a
+  broken account and a normal one produce the identical screen and the fault would surface nowhere.
+  Which accounts are allowed and refused has not changed by a single row: the same policy is asked
+  the same question, through `Gate::denies` instead of `authorize()`, only so the answer has
+  somewhere to put a reason. No role, permission, seeder, migration or route was touched.
+
 ## [0.13.0] - 2026-08-28
 
 ### Changed

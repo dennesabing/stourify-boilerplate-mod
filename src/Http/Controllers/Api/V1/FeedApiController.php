@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Modules\Stourify\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\OrganizationContext;
+use App\Traits\ApiResponses;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Gate;
 use Modules\Stourify\Http\Requests\FeedIndexRequest;
 use Modules\Stourify\Http\Resources\PostResource;
 use Modules\Stourify\Models\Post;
@@ -38,19 +42,37 @@ use Modules\Stourify\Support\LoadsViewerReactions;
  * a thundering herd for no gain. The offline design puts feed persistence on
  * the client (React Query keeps the last N pages), not the server; see
  * technical-spec.md §7, "server-composed / ephemeral".
+ *
+ * **A refusal says which refusal it is.** Two unrelated situations used to
+ * share one sentence — "This action is unauthorized." — and the app could act
+ * on neither: an account that belongs to no organization at all (never
+ * enrolled, which is a provisioning fault) and an account that is properly
+ * enrolled but may not read posts here. Both are still 403, because an empty
+ * feed would be indistinguishable from a healthy new account who follows
+ * nobody, and the fault would then surface nowhere at all. What changed is
+ * that each refusal carries a `code` naming its cause — see STOURIFY-228.
  */
 class FeedApiController extends Controller
 {
-    use AttachesExplorerProfiles, LoadsViewerReactions;
+    use ApiResponses, AttachesExplorerProfiles, LoadsViewerReactions;
+
+    public function __construct(private readonly OrganizationContext $organizations) {}
 
     /**
      * A cursor page of the viewer's home feed.
      */
-    public function index(FeedIndexRequest $request): AnonymousResourceCollection
+    public function index(FeedIndexRequest $request): AnonymousResourceCollection|JsonResponse
     {
-        $this->authorize('viewAny', Post::class);
-
         $user = $request->user();
+
+        // The same question `authorize()` asked, of the same policy, with the
+        // same answer — asked this way only so the refusal can carry a reason.
+        // `authorize()` throws, and Laravel renders that throw as one fixed
+        // sentence with nowhere to put one.
+        if (Gate::forUser($user)->denies('viewAny', Post::class)) {
+            return $this->refusal();
+        }
+
         $limit = (int) ($request->validated('limit') ?? 20);
 
         $query = Post::query()
@@ -73,5 +95,36 @@ class FeedApiController extends Controller
         );
 
         return PostResource::collection($posts);
+    }
+
+    /**
+     * Say which of the two reasons this caller was refused for.
+     *
+     * The question is "did this request resolve an organization at all", asked
+     * of the context singleton the organization middlewares fill in — not
+     * whether the account's `current_organization_id` column happens to be
+     * null. `SetCurrentOrganization` auto-selects an account's only
+     * organization when that column is empty and writes the choice back, so a
+     * null column on an enrolled account is a passing state rather than a
+     * fault.
+     */
+    private function refusal(): JsonResponse
+    {
+        if (! $this->organizations->has()) {
+            return $this->error(
+                'This account is not linked to a Stourify organization yet, so it has no feed to show. '
+                .'Signing out and back in usually fixes it; if it does not, the account needs to be set up again.',
+                403,
+                null,
+                'NO_ORGANIZATION',
+            );
+        }
+
+        return $this->error(
+            'This account is not allowed to view posts in this organization.',
+            403,
+            null,
+            'FEED_ACCESS_DENIED',
+        );
     }
 }
