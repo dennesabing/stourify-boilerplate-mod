@@ -15,6 +15,8 @@ use Modules\Stourify\Models\ExplorerProfile;
 use Modules\Stourify\Models\Follow;
 use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Support\AuthorizationMemo;
+use Spatie\Permission\Models\Role;
 use Tests\Traits\InteractsWithTestSetup;
 
 uses(RefreshDatabase::class, InteractsWithTestSetup::class);
@@ -382,4 +384,151 @@ test('naming the refusal did not narrow who is let in', function (): void {
     $this->getJson('/api/v1/feed', orgHeader($this->organization))
         ->assertOk()
         ->assertJsonPath('data.0.uuid', $post->uuid);
+});
+
+// ---------------------------------------------------------------------------
+// What a feed page costs (STOURIFY-229)
+// ---------------------------------------------------------------------------
+
+/**
+ * The sibling of the test above, and the reason that one was not enough.
+ *
+ * That test holds the author set still and adds posts. These posts carry no
+ * photos, so the per-photo cost this test is about never runs — which is
+ * exactly why a real N+1 lived underneath a passing ceiling for months
+ * (STOURIFY-203, measured under STOURIFY-229).
+ *
+ * The cost being pinned here: a photo's web address is built from a folder
+ * named after the thing the photo hangs off, so asking a photo for its address
+ * used to send the photo back to the database to fetch its own post. One
+ * photo, one query. A page of fifteen photos, fifteen queries — and on a
+ * database reached over a network that was two whole seconds of a seventeen
+ * second page.
+ */
+test('a feed page of posts with photos costs no more queries as more photos are added', function (): void {
+    Storage::fake('media');
+
+    $photoPosts = function (int $count, string $month): void {
+        foreach (range(1, $count) as $i) {
+            $post = publishedPost(
+                $this->organization, $this->author, $this->spot,
+                sprintf('2026-%s-%02d 09:00:00', $month, $i),
+            );
+            $post->addMedia(UploadedFile::fake()->image("photo-{$month}-{$i}.jpg", 60, 60))
+                ->toMediaCollection('attachments');
+        }
+    };
+
+    $feedQueries = function (int $expectedRows): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/v1/feed?limit=25', orgHeader($this->organization))
+            ->assertOk()->assertJsonCount($expectedRows, 'data');
+        $count = count(DB::getQueryLog());
+        DB::flushQueryLog();
+        DB::disableQueryLog();
+
+        return $count;
+    };
+
+    actingAsFeedUser($this->viewer);
+
+    $photoPosts(3, '06');
+    $threePhotos = $feedQueries(3);
+
+    $photoPosts(12, '07');
+    $fifteenPhotos = $feedQueries(15);
+
+    expect($fifteenPhotos)->toBeLessThanOrEqual($threePhotos,
+        "A photo must not cost a query of its own: {$threePhotos} queries for 3 photos, "
+        ."{$fifteenPhotos} for 15. The difference is one lookup per photo fetching its own post back."
+    );
+});
+
+/**
+ * The other half of the same page's cost, and the one that spends no queries
+ * at all.
+ *
+ * Every row in the feed carries a `can` block — may I edit this, delete it,
+ * publish it. Five of a post's six abilities ask the same question about the
+ * viewer: are they a moderator here? That answer cannot change while a single
+ * request is being served, and working it out is expensive, because saying
+ * "no" means Spatie has to gather up every permission of every role the
+ * viewer holds before it can be sure.
+ *
+ * So the invariant is: however many rows are on the page, the viewer's
+ * permissions get worked out a fixed number of times.
+ */
+test('the viewer\'s permissions are worked out a fixed number of times however many rows the feed returns', function (): void {
+    actingAsFeedUser($this->viewer);
+
+    $lookups = function (int $expectedRows): int {
+        AuthorizationMemo::forget();
+        $this->getJson('/api/v1/feed?limit=25', orgHeader($this->organization))
+            ->assertOk()->assertJsonCount($expectedRows, 'data');
+
+        return AuthorizationMemo::lookups();
+    };
+
+    foreach (range(1, 3) as $i) {
+        publishedPost($this->organization, $this->author, $this->spot, sprintf('2026-06-%02d 09:00:00', $i));
+    }
+    $threeRows = $lookups(3);
+
+    foreach (range(1, 12) as $i) {
+        publishedPost($this->organization, $this->author, $this->spot, sprintf('2026-07-%02d 09:00:00', $i));
+    }
+    $fifteenRows = $lookups(15);
+
+    // Two assertions, and the first one is not padding. A count of zero would
+    // also be "flat", and it is exactly what you get if the policies stop
+    // going through the memo at all — so without this the test would keep
+    // passing over the bug it exists to catch.
+    expect($threeRows)->toBeGreaterThan(0,
+        'The feed asked no permission question through the memo at all, which means the policies are not using it.'
+    );
+
+    expect($fifteenRows)->toBe($threeRows,
+        "Permission lookups must not scale with rows: {$threeRows} for 3 posts, {$fifteenRows} for 15."
+    );
+});
+
+/**
+ * The memo above only survives one request, and this is what makes that
+ * claim checkable. Grant a permission the viewer did not have, and the very
+ * next question must get the new answer rather than the remembered one.
+ *
+ * The mechanism: granting or revoking anything makes Spatie throw away its own
+ * permission cache, and this module listens for exactly that and throws away
+ * its memo alongside it.
+ */
+test('granting a permission is visible immediately, not after the memo happens to expire', function (): void {
+    $user = $this->createUserWithPermissions($this->organization, FEED_PERMISSIONS);
+
+    expect(AuthorizationMemo::permits($user, 'stourify.posts.manage'))->toBeFalse();
+
+    $user->givePermissionTo('stourify.posts.manage');
+
+    expect(AuthorizationMemo::permits($user, 'stourify.posts.manage'))->toBeTrue();
+});
+
+/**
+ * The other way a viewer's access can change, and the one the key above cannot
+ * see: the permission is added to a *role* the viewer already holds. Their
+ * role list does not change, so nothing about the viewer looks different.
+ *
+ * That path is caught by a different signal — changing a role's permissions
+ * makes the permission library throw away its own cache, and this module
+ * listens for that.
+ */
+test('adding a permission to a role the viewer already holds is visible immediately', function (): void {
+    $role = Role::findOrCreate('stourify-test-moderator', 'web');
+    $user = $this->createUserWithPermissions($this->organization, FEED_PERMISSIONS);
+    $user->assignRole($role);
+
+    expect(AuthorizationMemo::permits($user, 'stourify.posts.manage'))->toBeFalse();
+
+    $role->givePermissionTo('stourify.posts.manage');
+
+    expect(AuthorizationMemo::permits($user, 'stourify.posts.manage'))->toBeTrue();
 });
