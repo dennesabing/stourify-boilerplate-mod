@@ -112,3 +112,31 @@ it('links the documents to one another so a reader can reach all three', functio
     expect($content)->toContain('/terms')
         ->and($content)->toContain('/account-deletion');
 });
+
+it('says plainly that nobody is ever asked their age, instead of claiming a check that does not exist', function (): void {
+    // The page used to say "we do not knowingly collect data from them", which
+    // reads as a promise that somebody is watching. Nobody is: registration asks
+    // for a name, an email address and a password, and the word "age" appears
+    // nowhere in modules/Stourify/src. A policy whose own opening paragraph
+    // promises to "describe the software as it is actually built" cannot carry a
+    // sentence that leans on a check the code has never had (STOURIFY-218).
+    $text = strtolower(strip_tags($this->get('/privacy')->assertOk()->getContent()));
+
+    // The overclaim, gone in every casing.
+    expect($text)->not->toContain('do not knowingly collect')
+        // What is true instead: we never ask, so we cannot tell.
+        ->and($text)->toContain('date of birth')
+        ->and($text)->toContain('cannot tell how old')
+        // And the one thing in the section that was always a real mechanism:
+        // somebody tells us, and we remove the account.
+        ->and($text)->toContain('not intended for children')
+        ->and($text)->toContain('remove');
+});
+
+it('keeps the minimum-age blank unfilled in both legal documents', function (): void {
+    // STOURIFY-206 owns that number. This card must not race it, in either
+    // document, so the placeholders are pinned here as well as in the privacy
+    // test above.
+    expect($this->get('/privacy')->assertOk()->getContent())->toContain('[MINIMUM AGE]')
+        ->and($this->get('/terms')->assertOk()->getContent())->toContain('[MINIMUM AGE]');
+});

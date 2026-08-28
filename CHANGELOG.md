@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The privacy policy no longer claims an age check the app has never had** (STOURIFY-218).
+
+  A shop can honestly put an "over 18s only" sign on its door. What it cannot also do is claim it
+  never knowingly serves minors while having no door staff and no question at the till. Section 9 of
+  the privacy policy carried both sentences: the rule, which is fine, and "We do not knowingly
+  collect data from them", which reads as a promise that somebody is watching.
+
+  Nobody is. Registration asks for a name, an email address and a password — the policy's own
+  section 2.1 says so in a table — and no age, birthdate, validation rule or migration exists
+  anywhere in this module. That mattered here more than it would elsewhere, because this document's
+  opening paragraph promises to "describe the software as it is actually built" and says that where
+  it claims the app does not do something, that is a statement about the code.
+
+  Section 9 now says four true things in order: the service is not intended for children under the
+  stated minimum; we never ask for a date of birth or an age, so we hold nothing about how old you
+  are; we therefore cannot spot an under-age account by ourselves; and if someone tells us about one
+  we remove it — which was always the only real mechanism in the section.
+
+  **What was deliberately not done: collecting a self-declared date of birth at sign-up.** It is the
+  option that would make the old sentence true, and it was rejected for three reasons. A birthday
+  the user types is a number they can change, so it buys little real assurance. It adds personal
+  data the product would then have to justify holding under the 18-month retention rules and
+  describe in section 2.1. And whether a product asks its users their age is a product and legal
+  decision the operator has not made — the same reason the `[MINIMUM AGE]` blank in this very
+  sentence is still blank, which STOURIFY-206 owns and this change leaves untouched in both
+  documents.
+
+  Two tests in `LegalDocumentsTest` hold the line in both directions: the overclaim must be absent
+  from the served page in any casing and the honest wording present, and both `[MINIMUM AGE]`
+  placeholders must still be there.
+
 ### Fixed
 
 - **Spots read from the cache come back as spots again, instead of 500-ing the request**

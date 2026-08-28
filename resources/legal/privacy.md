@@ -187,9 +187,17 @@ You may also complain to your local data protection authority.
 
 ## 9. Children
 
-Stourify is not intended for children under **[MINIMUM AGE]**. We do not knowingly collect data from
-them. If you believe a child has created an account, contact **[PRIVACY CONTACT EMAIL]** and we will
-remove it.
+Stourify is not intended for children under **[MINIMUM AGE]**, and the terms of service say so as a
+rule of the service.
+
+**We do not check anyone's age, and this section says so rather than implying otherwise.** Signing up
+asks for a name, an email address and a password — see section 2.1 — and nothing anywhere in the app
+asks for a date of birth or an age. We hold no information at all about your age, so we simply
+cannot tell how old any account holder is.
+
+The practical consequence is that we cannot spot an under-age account by ourselves. What we can do is
+act on being told. If you believe a child has created an account, contact
+**[PRIVACY CONTACT EMAIL]** and we will remove it.
 
 ## 10. Security
 
