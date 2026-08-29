@@ -131,6 +131,19 @@ class SpotApiController extends Controller
             ->with(['city', 'user', 'media', 'tags'])
             ->paginate($perPage));
 
+        // A cached value is not ours to reshape. `SpotResource::collection()`
+        // calls `setCollection()` on a paginator, REPLACING its rows with
+        // resource objects — so the very thing we just read out of the cache
+        // comes back changed. On a store that serializes (Redis, in
+        // production) the entry was copied before we touched it and the damage
+        // is invisible; on a store that hands back the live object — the array
+        // store the test suite runs on — the next identical request receives a
+        // paginator full of `SpotResource`s and `attachDistances()` below
+        // rejects them on its type hint. Same code, opposite behaviour,
+        // decided by which cache driver is configured. Working on a shallow
+        // copy makes it behave the same everywhere (STOURIFY-244).
+        $spots = clone $spots;
+
         $this->attachDistances($spots, $latitude, $longitude);
 
         return SpotResource::collection($spots);
