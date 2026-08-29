@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A cached list is no longer quietly rewritten by the code that renders it (STOURIFY-245).** All
+  eight list endpoints in this module read a page of rows out of the cache and hand it straight to a
+  resource collection, which swaps those rows for display objects **inside the cached page itself**.
+  On the `array` cache driver the test suite runs on, the next identical request was then served the
+  rewritten page: the proximity search threw a 500, and the rest went on rendering a slightly
+  different answer to an identical question without anybody noticing. The real fix is one level
+  down, in the platform's `Cacheable` trait, which now hands back a copy of a cached paginator — so
+  the one-off `clone` STOURIFY-244 had to leave in `SpotApiController::nearby()` is gone, and the
+  ninth endpoint somebody writes is safe without remembering anything. Added
+  `tests/Feature/CachedListRepeatReadTest.php`, which calls four cached list endpoints twice each.
+  It asserts what the **cache** is holding between the two calls, not only that the two answers
+  match, because a resource wrapped in a resource renders to byte-identical JSON — so the obvious
+  assertion passes on a cache that has already been corrupted, and would not have caught this.
+
 - **Turning off "Show location on spots" now takes effect on the very next request, instead of
   whenever a cache happened to expire (STOURIFY-244).** A shop puts its opening hours on a board
   outside; change the hours inside and the board keeps telling the street the old ones until

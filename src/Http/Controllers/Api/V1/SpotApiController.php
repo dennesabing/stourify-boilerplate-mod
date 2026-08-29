@@ -131,19 +131,18 @@ class SpotApiController extends Controller
             ->with(['city', 'user', 'media', 'tags'])
             ->paginate($perPage));
 
-        // A cached value is not ours to reshape. `SpotResource::collection()`
-        // calls `setCollection()` on a paginator, REPLACING its rows with
-        // resource objects — so the very thing we just read out of the cache
-        // comes back changed. On a store that serializes (Redis, in
-        // production) the entry was copied before we touched it and the damage
-        // is invisible; on a store that hands back the live object — the array
-        // store the test suite runs on — the next identical request receives a
-        // paginator full of `SpotResource`s and `attachDistances()` below
-        // rejects them on its type hint. Same code, opposite behaviour,
-        // decided by which cache driver is configured. Working on a shallow
-        // copy makes it behave the same everywhere (STOURIFY-244).
-        $spots = clone $spots;
-
+        // The line that used to sit here was `$spots = clone $spots;`, and it
+        // is gone because the platform now makes that copy for every caller.
+        // `SpotResource::collection()` calls `setCollection()` on a paginator,
+        // REPLACING its rows with resource objects, so handing it the very
+        // object the cache is holding leaves the cache holding the rewritten
+        // one — invisible on a store that serializes (Redis, in production),
+        // permanent on a store that hands back the live object (the array
+        // store the test suite runs on), and on the second identical request
+        // `attachDistances()` below rejects the resources on its type hint.
+        // `Cacheable::getCachedList()` now returns a copy of a cached
+        // paginator, so this endpoint — and every other one — is safe without
+        // remembering anything (STOURIFY-244, fixed properly in STOURIFY-245).
         $this->attachDistances($spots, $latitude, $longitude);
 
         return SpotResource::collection($spots);
