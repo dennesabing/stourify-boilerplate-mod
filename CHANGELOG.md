@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Checked whether the offline sync delta was leaking hidden spot coordinates, and it was not
+  (STOURIFY-187).** `shows_location_on_spots` lets a contributor stop their spots revealing where
+  they are, and the delta was written up as the one remaining hole: `SyncSerializer` lists
+  `latitude` and `longitude` with no reference to the setting anywhere near them, so reading that
+  file alone the conclusion is unavoidable. It is wrong, because a different file decides which rows
+  the serializer is handed. `SyncRegistry::scope()` restricts every delta query for `sto_spots` to
+  `user_id = the caller`, so the only device a spot's coordinates are ever synced to belongs to the
+  person who put the spot there — and that person is exactly who is meant to keep seeing them. A
+  hidden spot does not reach a stranger's phone stripped of its position; it does not reach it at
+  all. Nothing in the behaviour changed. What changed is that the guarantee is now written down and
+  guarded: `SpotLocationPrivacyTest` gains a *Path 4* section that goes red the day somebody widens
+  that scope — verified by widening it and watching three of the four fail — and
+  `SyncRegistry::scope()` and `SyncSerializer::COLUMNS` now say they are a privacy control and what
+  has to change alongside them, in which order, if the delta ever does carry somebody else's spots.
+
 - **A feed page no longer works the viewer's permissions out from scratch for every row on it
   (STOURIFY-229).** The home feed took about seventeen seconds to build and the app gives up at
   fifteen, so the first screen of the app was losing a race with its own deadline — on the fastest
