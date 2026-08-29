@@ -97,6 +97,36 @@ final class SyncRegistry
      * a follow is scoped to either side of the edge, and cities are global
      * reference data everyone reads unfiltered.
      *
+     * **This is also a privacy control, and it does not look like one.**
+     * `sto_spots` being scoped to `user_id` is what keeps the promise a
+     * contributor makes when they turn off `shows_location_on_spots`: the only
+     * device a spot's coordinates are ever synced to belongs to the person who
+     * put the spot there, and that person is exactly who is entitled to see
+     * them (`Spot::locationHiddenFrom()`). Every REST path withholds a hidden
+     * position (STOURIFY-185); the delta withholds the whole row, which is
+     * stronger. `SyncSerializer` therefore lists `latitude` and `longitude`
+     * unconditionally and is right to — it is handed rows, it does not choose
+     * them.
+     *
+     * So a widening here is not a synchronisation change. Shipping the spots of
+     * people you follow, so they can be read offline, is an ordinary thing this
+     * product may eventually want, and it would reopen a leak three cards were
+     * spent closing. If you widen it, two things must change with it, IN THIS
+     * ORDER (STOURIFY-187):
+     *
+     *   1. The device's WatermelonDB schema (`mobile/src/db/schema.ts`) has to
+     *      accept a spot with no coordinates — `latitude` and `longitude` become
+     *      `isOptional`. This comes first.
+     *   2. Only then may `SyncSerializer` omit the two keys for a spot whose
+     *      contributor hid its position, which needs `contributorProfile`
+     *      eager-loaded in `eagerLoad()` above or it is a query per row.
+     *
+     * The reverse order is the trap, because it fails silently: WatermelonDB
+     * does not reject a `null` in a non-optional number column, it stores `0`,
+     * and the app then draws a pin at (0, 0) in the Atlantic.
+     *
+     * `SpotLocationPrivacyTest` §*Path 4* is the tripwire on all of the above.
+     *
      * @param  Builder<*>  $query
      * @return Builder<*>
      */

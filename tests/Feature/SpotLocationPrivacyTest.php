@@ -29,9 +29,11 @@ uses(RefreshDatabase::class, InteractsWithTestSetup::class);
  *      2 km of here?" and the same fact falls out of three requests instead of
  *      one.
  *
- * The fourth path, the offline sync delta, is deliberately NOT covered here: it
- * cannot be closed until the device's WatermelonDB schema accepts a spot with
- * no coordinates, which is STOURIFY-187.
+ *   4. The offline sync delta -- covered at the bottom of this file. It turned
+ *      out never to have been open: the delta only ever sends a device its own
+ *      owner's spots, so a hidden spot never reaches anybody else's phone at
+ *      all (STOURIFY-187). Those tests are a tripwire on that scope rather than
+ *      a fix, and the block above them says why.
  */
 const LOCATION_EXPLORER_PERMISSIONS = [
     'stourify.spots.view',
@@ -242,4 +244,140 @@ test('a contributor with no explorer profile at all still shows coordinates', fu
     $this->getJson("/api/v1/spots/{$spot->uuid}", orgHeader($this->organization))
         ->assertOk()
         ->assertJsonPath('data.latitude', fn ($v): bool => $v !== null);
+});
+
+// ---------------------------------------------------------------------------
+// Path 4 -- the offline sync delta
+// ---------------------------------------------------------------------------
+
+/*
+ * This section is a tripwire, not a description, and the difference is the
+ * point of it.
+ *
+ * The delta was written up as the fourth leak path on the grandparent card
+ * STOURIFY-75: `SyncSerializer::COLUMNS['sto_spots']` lists `latitude` and
+ * `longitude` with no reference to `shows_location_on_spots` anywhere near it.
+ * Read that file on its own and the conclusion is unavoidable.
+ *
+ * It is wrong, and what makes it wrong is one line in a different file.
+ * `SyncRegistry::scope()` restricts every delta query for `sto_spots` to
+ * `user_id = the caller`, so the only spots the server ever sends a device are
+ * that device owner's own spots -- and the owner is exactly the person who
+ * keeps seeing their coordinates by design. A hidden spot does not reach a
+ * stranger's phone stripped of its position; it does not reach it at all.
+ *
+ * So these tests pass today for the strongest reason available: the row is not
+ * there. They exist because that guarantee currently rests on a `where()`
+ * clause in a file about synchronisation, which reads as plumbing rather than
+ * as a privacy control. Shipping the spots of people you follow, so they can be
+ * read offline, is an ordinary thing an offline-first travel app eventually
+ * wants -- and the day somebody widens that scope, these go red in the same
+ * commit.
+ *
+ * If that ever happens, closing it properly is two changes and they must land
+ * in this order: the device's WatermelonDB schema has to accept a spot with no
+ * coordinates FIRST, and only then may the serializer stop sending them. The
+ * reverse order writes a `null` into a non-optional client column, and
+ * WatermelonDB does not refuse that -- it silently stores `0`, which draws a
+ * pin at (0, 0) in the Atlantic (STOURIFY-187).
+ */
+
+function locationDeltaUrl(?string $since = null): string
+{
+    return $since === null
+        ? '/api/v1/stourify/sync/delta'
+        : '/api/v1/stourify/sync/delta?since='.urlencode($since);
+}
+
+test('the sync delta never hands another explorer a hidden spot, so its coordinates never reach that device', function (): void {
+    $hidden = spotWithLocationVisibility(false, $this->hider, $this->organization);
+
+    actingAsViewer($this->viewer);
+
+    $payload = $this->getJson(locationDeltaUrl(), orgHeader($this->organization))
+        ->assertOk()
+        ->json('sto_spots');
+
+    $rows = collect([...$payload['created'], ...$payload['updated']]);
+
+    expect($rows->pluck('uuid'))->not->toContain($hidden->uuid);
+
+    // Belt as well as braces: assert on the coordinates themselves, not only on
+    // the identity of the row carrying them. A future change that reshapes the
+    // delta's rows but keeps the position in them would slip past a uuid check.
+    foreach ($rows as $row) {
+        expect($row['latitude'] ?? null)->not->toEqual((string) $hidden->latitude);
+        expect($row['longitude'] ?? null)->not->toEqual((string) $hidden->longitude);
+    }
+});
+
+test('an incremental delta does not deliver a hidden spot to another explorer either', function (): void {
+    // The card that asked for this worried about the case where a device is
+    // already holding a spot and then pulls an update for it. That is the
+    // `since` cursor, and it runs through the same scope as the first full
+    // pull -- but it is a separate query, so it gets its own assertion rather
+    // than an argument that it must behave the same.
+    $hidden = spotWithLocationVisibility(false, $this->hider, $this->organization);
+
+    $cursor = now()->subMinute()->toIso8601String();
+
+    $hidden->forceFill(['title' => 'Renamed after the cursor'])->save();
+
+    actingAsViewer($this->viewer);
+
+    $payload = $this->getJson(locationDeltaUrl($cursor), orgHeader($this->organization))
+        ->assertOk()
+        ->json('sto_spots');
+
+    $uuids = collect([...$payload['created'], ...$payload['updated']])->pluck('uuid');
+
+    expect($uuids)->not->toContain($hidden->uuid);
+});
+
+test('the contributor of a hidden spot still receives its coordinates on their own delta', function (): void {
+    // The other half, and the reason no change to the serializer is wanted: the
+    // only device a spot's position is ever synced to belongs to the person who
+    // put it there. Withholding it here would break the author's own offline
+    // copy of their own map.
+    $hidden = spotWithLocationVisibility(false, $this->hider, $this->organization);
+
+    actingAsViewer($this->hider);
+
+    $rows = collect($this->getJson(locationDeltaUrl(), orgHeader($this->organization))
+        ->assertOk()
+        ->json('sto_spots.created'));
+
+    $row = $rows->firstWhere('uuid', $hidden->uuid);
+
+    expect($row)->not->toBeNull()
+        ->and($row['latitude'])->not->toBeNull()
+        ->and($row['longitude'])->not->toBeNull();
+});
+
+test('every spot on a delta belongs to the caller, which is what makes the guarantee above hold', function (): void {
+    // The tripwire proper. The three tests above are about one hidden spot;
+    // this one is about the rule they all rest on, stated once so that widening
+    // the scope fails here first and unambiguously.
+    spotWithLocationVisibility(false, $this->hider, $this->organization);
+
+    $mine = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->viewer->id,
+        'status' => SpotStatus::Published,
+        'latitude' => 6.1164,
+        'longitude' => 125.1716,
+    ]);
+
+    actingAsViewer($this->viewer);
+
+    $payload = $this->getJson(locationDeltaUrl(), orgHeader($this->organization))
+        ->assertOk()
+        ->json('sto_spots');
+
+    $rows = collect([...$payload['created'], ...$payload['updated']]);
+
+    expect($rows->pluck('uuid'))->toContain($mine->uuid);
+
+    foreach ($rows as $row) {
+        expect($row['user_id'])->toBe($this->viewer->id);
+    }
 });

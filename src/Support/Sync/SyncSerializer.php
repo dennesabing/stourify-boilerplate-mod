@@ -31,6 +31,16 @@ final class SyncSerializer
      * @var array<string, list<string>>
      */
     private const COLUMNS = [
+        // `latitude` and `longitude` are listed unconditionally, and that is
+        // correct rather than an oversight — it was written up as the fourth way
+        // a hidden spot's position escapes (STOURIFY-75) and checked properly
+        // under STOURIFY-187. This class is handed rows; it does not choose
+        // them. `SyncRegistry::scope()` restricts every delta query for this
+        // table to `user_id = the caller`, so the only device these two numbers
+        // ever reach belongs to the contributor who put the spot there — the one
+        // person `shows_location_on_spots` never hides a position from. Read
+        // that method's docblock before adding a condition here: doing it in the
+        // wrong order breaks the app silently.
         'sto_spots' => [
             'id', 'uuid', 'organization_id', 'user_id', 'city_id', 'owner_user_id',
             'title', 'slug', 'description', 'latitude', 'longitude', 'address',
