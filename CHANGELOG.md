@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Turning off "Show location on spots" now takes effect on the very next request, instead of
+  whenever a cache happened to expire (STOURIFY-244).** A shop puts its opening hours on a board
+  outside; change the hours inside and the board keeps telling the street the old ones until
+  somebody walks out and repaints it. Every spot list in this module was that board. The result is
+  cached, so both halves of the guarantee STOURIFY-185 added — the query that drops a hidden
+  contributor's spots out of a radius search, and the resource that omits the two coordinate keys —
+  only ran when the cache missed. Measured on a real emulator with two accounts: after the
+  contributor switched the setting off, a second account kept receiving their exact coordinates
+  until `php artisan cache:clear` was run by hand. **This is worth reading differently from an
+  ordinary stale cache.** Every other one costs somebody a slightly old list; this one costs them
+  the thing they asked to hide. Somebody switches it off *because they have a reason to*, closes the
+  app believing it is done, and their position keeps going out to strangers until a timer nobody can
+  see runs down — with nothing on screen saying so. It also made STOURIFY-241's own promise only
+  eventually true. `ExplorerProfile` now throws away the cached lists that can carry a spot's
+  position the moment the setting changes, when a profile is created already holding it off, and
+  when a profile is deleted (no profile means shown, so deleting one makes positions visible again).
+  **Three cache families, not one**, and the second and third are the ones easy to miss: `Spot`
+  eager-loads its contributor's profile on every query, so a cached *post* and a cached *wishlist*
+  each carry a frozen copy of this very flag, and both nest a spot in what they render. An ordinary
+  profile edit — a new bio — still clears nothing, which is why the check is on the flag rather than
+  on every save. Eight new cases in `SpotLocationPrivacyTest`, each of which **warms the cache
+  first**: that is the whole experiment rather than set-up noise, and all eight were measured red
+  before the change. The two routes not taken, and why they lost, are on the card. Also fixed
+  alongside, because a clean failing test was impossible without it: `spots/nearby` handed the
+  paginator it had just read out of the cache straight to `SpotResource::collection()`, which
+  rewrites a paginator's rows in place — harmless on a store that serializes, and on the array store
+  the suite runs on it left the next identical request holding resource objects where models were
+  expected. The same pattern at six other endpoints is filed as STOURIFY-245.
+
 - **Checked whether the offline sync delta was leaking hidden spot coordinates, and it was not
   (STOURIFY-187).** `shows_location_on_spots` lets a contributor stop their spots revealing where
   they are, and the delta was written up as the one remaining hole: `SyncSerializer` lists

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Laravel\Sanctum\Sanctum;
 use Modules\Stourify\Enums\SpotStatus;
 use Modules\Stourify\Models\ExplorerProfile;
+use Modules\Stourify\Models\Post;
 use Modules\Stourify\Models\Spot;
+use Modules\Stourify\Models\WishlistItem;
 use Tests\Traits\InteractsWithTestSetup;
 
 uses(RefreshDatabase::class, InteractsWithTestSetup::class);
@@ -380,4 +383,244 @@ test('every spot on a delta belongs to the caller, which is what makes the guara
     foreach ($rows as $row) {
         expect($row['user_id'])->toBe($this->viewer->id);
     }
+});
+
+// ---------------------------------------------------------------------------
+// The cache the other way round -- when the setting CHANGES (STOURIFY-244)
+// ---------------------------------------------------------------------------
+
+/*
+ * The tests above all ask the same question: given a flag, does the API respect
+ * it? The answer was yes, and it was still yes an hour after somebody changed
+ * their mind -- which is the bug.
+ *
+ * A shop puts its opening hours on a board outside. Change the hours inside and
+ * the board keeps telling the street the old ones until somebody walks out and
+ * repaints it. Every list below is that board: the result is cached, so the
+ * exclusion `withLocationVisibleTo()` performs, and the omission `SpotResource`
+ * performs, both happen only on a cache miss.
+ *
+ * Two separate things go stale, and it is worth knowing they are two, because
+ * fixing only the first would leave three quarters of this section red:
+ *
+ *   1. THE QUERY. `nearby` wraps its whole query in `Spot::getCachedList()`,
+ *      and the scope that drops a hidden contributor's spots runs inside that
+ *      closure.
+ *   2. THE FLAG ITSELF. `Spot` eager-loads `contributorProfile` (STOURIFY-185
+ *      put it on the model to kill an N+1), so a cached spot carries a frozen
+ *      copy of its contributor's profile row. `SpotResource` runs OUTSIDE the
+ *      cache and still reads that copy -- so `spots:index`, `posts:index` and
+ *      `wishlist:index` hand out coordinates from a flag nobody is looking at
+ *      any more.
+ *
+ * Every test here therefore WARMS the cache first. That is not set-up noise; it
+ * is the entire experiment. A version of these tests that asked once would pass
+ * against the broken code, which is the specific failure this card had to rule
+ * out.
+ */
+
+function locationProfileOf(User $contributor): ExplorerProfile
+{
+    return ExplorerProfile::query()->where('user_id', $contributor->id)->firstOrFail();
+}
+
+test('turning the flag off drops a contributor spot out of a stranger already-warmed nearby result on the very next request', function (): void {
+    // The card's own reproduction, measured on a real emulator with two
+    // accounts before it was written down.
+    $spot = spotWithLocationVisibility(true, $this->hider, $this->organization);
+
+    actingAsViewer($this->viewer);
+
+    $warm = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+    expect(collect($warm)->pluck('uuid'))->toContain($spot->uuid);
+
+    locationProfileOf($this->hider)->forceFill(['shows_location_on_spots' => false])->save();
+
+    $after = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($after)->pluck('uuid'))->not->toContain($spot->uuid);
+});
+
+test('turning the flag off strips coordinates from an already-warmed spot listing on the very next request', function (): void {
+    $spot = spotWithLocationVisibility(true, $this->hider, $this->organization);
+
+    actingAsViewer($this->viewer);
+
+    $warm = collect($this->getJson('/api/v1/spots', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data'))->firstWhere('uuid', $spot->uuid);
+    expect($warm)->toHaveKey('latitude');
+
+    locationProfileOf($this->hider)->forceFill(['shows_location_on_spots' => false])->save();
+
+    $after = collect($this->getJson('/api/v1/spots', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data'))->firstWhere('uuid', $spot->uuid);
+
+    expect($after)->not->toBeNull()
+        ->and($after)->not->toHaveKey('latitude')
+        ->and($after)->not->toHaveKey('longitude');
+});
+
+test('turning the flag off strips coordinates from the spot nested inside an already-warmed post listing', function (): void {
+    // `posts:index` is a different cache family with its own tag, so clearing
+    // the spot family alone would leave this one answering with the old flag.
+    $spot = spotWithLocationVisibility(true, $this->hider, $this->organization);
+    Post::factory()->for($this->organization)->create([
+        'user_id' => $this->hider->id,
+        'spot_id' => $spot->id,
+    ]);
+
+    $this->seedPermissions(['stourify.posts.view']);
+    $this->viewer->givePermissionTo('stourify.posts.view');
+
+    actingAsViewer($this->viewer);
+
+    $warm = $this->getJson('/api/v1/posts', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+    expect($warm[0]['spot'])->toHaveKey('latitude');
+
+    locationProfileOf($this->hider)->forceFill(['shows_location_on_spots' => false])->save();
+
+    $after = $this->getJson('/api/v1/posts', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    expect($after[0]['spot'])->not->toHaveKey('latitude')
+        ->and($after[0]['spot'])->not->toHaveKey('longitude');
+});
+
+test('turning the flag off strips coordinates from the spot nested inside an already-warmed wishlist', function (): void {
+    // Somebody else has saved this spot to their own wishlist. Their saved copy
+    // is cached under a third tag family, and it renders the same nested spot.
+    $spot = spotWithLocationVisibility(true, $this->hider, $this->organization);
+
+    $this->seedPermissions(['stourify.wishlist.manage']);
+    $this->viewer->givePermissionTo('stourify.wishlist.manage');
+
+    WishlistItem::factory()->for($this->organization)->create([
+        'user_id' => $this->viewer->id,
+        'spot_id' => $spot->id,
+    ]);
+
+    actingAsViewer($this->viewer);
+
+    $warm = $this->getJson('/api/v1/wishlist', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+    expect($warm[0]['spot'])->toHaveKey('latitude');
+
+    locationProfileOf($this->hider)->forceFill(['shows_location_on_spots' => false])->save();
+
+    $after = $this->getJson('/api/v1/wishlist', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    expect($after[0]['spot'])->not->toHaveKey('latitude')
+        ->and($after[0]['spot'])->not->toHaveKey('longitude');
+});
+
+test('turning the flag back on restores the spot just as promptly', function (): void {
+    // This is a correctness fix, not a one-way tripwire. Somebody who hides
+    // their location, thinks better of it and turns it back on must not be told
+    // to wait an hour either.
+    $spot = spotWithLocationVisibility(false, $this->hider, $this->organization);
+
+    actingAsViewer($this->viewer);
+
+    $warm = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+    expect(collect($warm)->pluck('uuid'))->not->toContain($spot->uuid);
+
+    locationProfileOf($this->hider)->forceFill(['shows_location_on_spots' => true])->save();
+
+    $after = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($after)->pluck('uuid'))->toContain($spot->uuid);
+});
+
+test('an ordinary profile edit clears nothing', function (): void {
+    // The guard on the decision to check the flag rather than clear on every
+    // save. Editing a bio must not throw away every viewer's cached map, and
+    // somebody tidying this code later must find that out from a red test
+    // rather than from a graph.
+    //
+    // Proving a cache was NOT emptied needs something to look for afterwards,
+    // so this leaves a marker of its own in the same tag family the real
+    // entries live in. The marker survives a bio change and does not survive a
+    // change to the flag -- both halves asserted here, because "nothing was
+    // cleared" is only meaningful next to a case where something was.
+    spotWithLocationVisibility(true, $this->hider, $this->organization);
+
+    Cache::tags(['Spot:list'])->put('stourify-244-probe', 'warm', 600);
+
+    locationProfileOf($this->hider)->forceFill(['bio' => 'Still wandering.'])->save();
+
+    expect(Cache::tags(['Spot:list'])->get('stourify-244-probe'))->toBe('warm');
+
+    locationProfileOf($this->hider)->forceFill(['shows_location_on_spots' => false])->save();
+
+    expect(Cache::tags(['Spot:list'])->get('stourify-244-probe'))->toBeNull();
+});
+
+test('a profile created already holding the flag off clears the caches too', function (): void {
+    // Eloquent only works out what changed on an UPDATE, so `wasChanged()` is
+    // false straight after an insert. A contributor who publishes spots first
+    // and fills in their profile afterwards would otherwise slip through.
+    $spot = Spot::factory()->for($this->organization)->create([
+        'user_id' => $this->hider->id,
+        'status' => SpotStatus::Published,
+        'latitude' => 6.1164,
+        'longitude' => 125.1716,
+    ]);
+
+    actingAsViewer($this->viewer);
+
+    $warm = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+    expect(collect($warm)->pluck('uuid'))->toContain($spot->uuid);
+
+    ExplorerProfile::factory()->for($this->organization)->create([
+        'user_id' => $this->hider->id,
+        'shows_location_on_spots' => false,
+    ]);
+
+    $after = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($after)->pluck('uuid'))->not->toContain($spot->uuid);
+});
+
+test('deleting a profile clears the caches, because no profile means shown', function (): void {
+    // The rule STOURIFY-185 set: a spot whose contributor has no profile row at
+    // all shows its coordinates. So deleting a profile makes positions MORE
+    // visible, and a cache still holding the hidden answer is wrong in the
+    // opposite direction -- stale in a way that hides a real place from the map
+    // rather than leaking one.
+    $spot = spotWithLocationVisibility(false, $this->hider, $this->organization);
+
+    actingAsViewer($this->viewer);
+
+    $warm = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+    expect(collect($warm)->pluck('uuid'))->not->toContain($spot->uuid);
+
+    locationProfileOf($this->hider)->delete();
+
+    $after = $this->getJson('/api/v1/spots/nearby?lat=6.1164&lng=125.1716&radius=10', orgHeader($this->organization))
+        ->assertOk()
+        ->json('data');
+
+    expect(collect($after)->pluck('uuid'))->toContain($spot->uuid);
 });
