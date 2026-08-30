@@ -7,7 +7,7 @@ namespace Modules\Stourify\Policies;
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Models\WishlistItem;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use Modules\Stourify\Policies\Concerns\ChecksModeratorAccess;
 
 /**
  * Authorization for wishlist items.
@@ -23,6 +23,8 @@ use Spatie\Permission\Exceptions\PermissionDoesNotExist;
  */
 class WishlistItemPolicy
 {
+    use ChecksModeratorAccess;
+
     /**
      * @var list<string>
      */
@@ -30,6 +32,11 @@ class WishlistItemPolicy
         RoleEnum::SUPER_ADMIN->value,
         RoleEnum::SITE_ADMIN->value,
     ];
+
+    /**
+     * None, deliberately. A wishlist is nobody else's business, so there is nothing for a moderator to manage.
+     */
+    private const MANAGE_PERMISSION = null;
 
     public function viewAny(User $user): bool
     {
@@ -67,17 +74,4 @@ class WishlistItemPolicy
      * Only platform admins, never org-scoped roles: a wishlist is personal, so
      * an org owner has no standing over it the way they do over org content.
      */
-    private function isModerator(User $user): bool
-    {
-        return $user->hasAnyRole(self::OVERRIDE_ROLES);
-    }
-
-    private function allows(User $user, string $permission): bool
-    {
-        try {
-            return $user->hasPermissionTo($permission);
-        } catch (PermissionDoesNotExist) {
-            return false;
-        }
-    }
 }

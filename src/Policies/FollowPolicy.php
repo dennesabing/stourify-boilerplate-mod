@@ -7,7 +7,7 @@ namespace Modules\Stourify\Policies;
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Models\Follow;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use Modules\Stourify\Policies\Concerns\ChecksModeratorAccess;
 
 /**
  * Authorization for follow edges.
@@ -31,6 +31,8 @@ use Spatie\Permission\Exceptions\PermissionDoesNotExist;
  */
 class FollowPolicy
 {
+    use ChecksModeratorAccess;
+
     /**
      * @var list<string>
      */
@@ -40,6 +42,11 @@ class FollowPolicy
         RoleEnum::SUPER_ADMIN->value,
         RoleEnum::SITE_ADMIN->value,
     ];
+
+    /**
+     * None, deliberately. The module publishes one participant capability for the follow graph rather than a moderation permission, so the override roles are the only way past the ownership rule.
+     */
+    private const MANAGE_PERMISSION = null;
 
     public function viewAny(User $user): bool
     {
@@ -99,17 +106,4 @@ class FollowPolicy
      * capability. Oversight comes from the platform override roles alone,
      * rather than inventing a permission nothing else references.
      */
-    private function isModerator(User $user): bool
-    {
-        return $user->hasAnyRole(self::OVERRIDE_ROLES);
-    }
-
-    private function allows(User $user, string $permission): bool
-    {
-        try {
-            return $user->hasPermissionTo($permission);
-        } catch (PermissionDoesNotExist) {
-            return false;
-        }
-    }
 }

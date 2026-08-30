@@ -7,7 +7,7 @@ namespace Modules\Stourify\Policies;
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Models\Report;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use Modules\Stourify\Policies\Concerns\ChecksModeratorAccess;
 
 /**
  * Authorization for reports.
@@ -29,6 +29,8 @@ use Spatie\Permission\Exceptions\PermissionDoesNotExist;
  */
 class ReportPolicy
 {
+    use ChecksModeratorAccess;
+
     /**
      * @var list<string>
      */
@@ -38,6 +40,11 @@ class ReportPolicy
         RoleEnum::SUPER_ADMIN->value,
         RoleEnum::SITE_ADMIN->value,
     ];
+
+    /**
+     * The module permission that also confers moderator standing here.
+     */
+    private const MANAGE_PERMISSION = 'stourify.reports.manage';
 
     public function viewAny(User $user): bool
     {
@@ -66,21 +73,6 @@ class ReportPolicy
 
     public function delete(User $user, Report $report): bool
     {
-        return $user->hasAnyRole([RoleEnum::SUPER_ADMIN->value]);
-    }
-
-    private function isModerator(User $user): bool
-    {
-        return $user->hasAnyRole(self::OVERRIDE_ROLES)
-            || $this->allows($user, 'stourify.reports.manage');
-    }
-
-    private function allows(User $user, string $permission): bool
-    {
-        try {
-            return $user->hasPermissionTo($permission);
-        } catch (PermissionDoesNotExist) {
-            return false;
-        }
+        return $this->holdsAnyRole($user, [RoleEnum::SUPER_ADMIN->value]);
     }
 }
