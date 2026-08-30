@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The six remaining policies stopped working a viewer's permissions out from scratch on every
+  check, and all eight now share one copy of the helpers instead of eight (STOURIFY-238).** A
+  doorman asked, for every single item a visitor looks at, whether that visitor is staff should read
+  the staff list once and remember it — not walk to the office each time. Under STOURIFY-229 two of
+  this module's policies learned to do that; the other six were left behind, invisibly, because a
+  copy nobody touched looks exactly like a copy that needed no touching. Measured before anything
+  changed, with a viewer that tallies every question reaching the permission library and alters none
+  of the answers: one page of `GET /api/v1/reviews` cost **95 questions at three rows and 467 at
+  fifteen** — about thirty-one per row, every one with the same answer. Afterwards the module's own
+  policies ask **four questions for that page, and four whatever the page length**, and the whole
+  page costs 68 and 320. What still grows with the page is the platform's own per-row work — a Gate
+  before-callback and the media attachable policy, both in `saas-boilerplate` — which is named and
+  left for its own card rather than fixed here. Nobody's access changes: the `can` block on every
+  row comes out with identical values. `BlockPolicy`, `FollowPolicy`, `ReportPolicy`,
+  `ReviewPolicy`, `SpotAboutPolicy` and `WishlistItemPolicy` now go through
+  `Support/AuthorizationMemo`, and the eight copied helper pairs became one
+  `Policies/Concerns/ChecksModeratorAccess`, which each policy feeds two constants: the roles that
+  override it, and the `…manage` permission it recognises or an explicit `null` where it
+  deliberately has none. The stray `forceDelete` role checks that five policies were still making
+  directly — `PostPolicy` and `SpotPolicy` included — go through the memo too.
+  `tests/Feature/PolicyPermissionCostTest.php` pins all of it by counting rather than timing: the
+  count must not grow with the row count, must not be zero, and every policy using the shared helper
+  must declare both constants.
+
 ### Fixed
 
 - **A cached list is no longer quietly rewritten by the code that renders it (STOURIFY-245).** All

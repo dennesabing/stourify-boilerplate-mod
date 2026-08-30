@@ -7,7 +7,7 @@ namespace Modules\Stourify\Policies;
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Models\Review;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use Modules\Stourify\Policies\Concerns\ChecksModeratorAccess;
 
 /**
  * Authorization for reviews.
@@ -24,6 +24,8 @@ use Spatie\Permission\Exceptions\PermissionDoesNotExist;
  */
 class ReviewPolicy
 {
+    use ChecksModeratorAccess;
+
     /**
      * @var list<string>
      */
@@ -33,6 +35,11 @@ class ReviewPolicy
         RoleEnum::SUPER_ADMIN->value,
         RoleEnum::SITE_ADMIN->value,
     ];
+
+    /**
+     * The module permission that also confers moderator standing here.
+     */
+    private const MANAGE_PERMISSION = 'stourify.reviews.manage';
 
     public function viewAny(User $user): bool
     {
@@ -78,21 +85,6 @@ class ReviewPolicy
 
     public function forceDelete(User $user, Review $review): bool
     {
-        return $user->hasAnyRole([RoleEnum::SUPER_ADMIN->value]);
-    }
-
-    private function isModerator(User $user): bool
-    {
-        return $user->hasAnyRole(self::OVERRIDE_ROLES)
-            || $this->allows($user, 'stourify.reviews.manage');
-    }
-
-    private function allows(User $user, string $permission): bool
-    {
-        try {
-            return $user->hasPermissionTo($permission);
-        } catch (PermissionDoesNotExist) {
-            return false;
-        }
+        return $this->holdsAnyRole($user, [RoleEnum::SUPER_ADMIN->value]);
     }
 }

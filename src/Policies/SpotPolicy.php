@@ -8,7 +8,7 @@ use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Enums\SpotStatus;
 use Modules\Stourify\Models\Spot;
-use Modules\Stourify\Support\AuthorizationMemo;
+use Modules\Stourify\Policies\Concerns\ChecksModeratorAccess;
 
 /**
  * Authorization for spots.
@@ -33,6 +33,8 @@ use Modules\Stourify\Support\AuthorizationMemo;
  */
 class SpotPolicy
 {
+    use ChecksModeratorAccess;
+
     /**
      * Roles that bypass the module's permission checks entirely, matching the
      * platform's convention for attachables.
@@ -45,6 +47,11 @@ class SpotPolicy
         RoleEnum::SUPER_ADMIN->value,
         RoleEnum::SITE_ADMIN->value,
     ];
+
+    /**
+     * The module permission that also confers moderator standing here.
+     */
+    private const MANAGE_PERMISSION = 'stourify.spots.manage';
 
     public function viewAny(User $user): bool
     {
@@ -114,7 +121,7 @@ class SpotPolicy
 
     public function forceDelete(User $user, Spot $spot): bool
     {
-        return $user->hasAnyRole([RoleEnum::SUPER_ADMIN->value]);
+        return $this->holdsAnyRole($user, [RoleEnum::SUPER_ADMIN->value]);
     }
 
     /**
@@ -145,14 +152,4 @@ class SpotPolicy
      * A permission the module declares but that has not been synced into the
      * database yet must deny, not explode. The memo keeps that behaviour.
      */
-    private function isModerator(User $user): bool
-    {
-        return AuthorizationMemo::holdsAnyRole($user, self::OVERRIDE_ROLES)
-            || $this->allows($user, 'stourify.spots.manage');
-    }
-
-    private function allows(User $user, string $permission): bool
-    {
-        return AuthorizationMemo::permits($user, $permission);
-    }
 }

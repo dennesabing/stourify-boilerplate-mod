@@ -7,7 +7,7 @@ namespace Modules\Stourify\Policies;
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Models\Block;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use Modules\Stourify\Policies\Concerns\ChecksModeratorAccess;
 
 /**
  * Authorization for blocks.
@@ -26,6 +26,8 @@ use Spatie\Permission\Exceptions\PermissionDoesNotExist;
  */
 class BlockPolicy
 {
+    use ChecksModeratorAccess;
+
     /**
      * @var list<string>
      */
@@ -35,6 +37,11 @@ class BlockPolicy
         RoleEnum::SUPER_ADMIN->value,
         RoleEnum::SITE_ADMIN->value,
     ];
+
+    /**
+     * None, deliberately. Blocking is a private act between two people and has no moderation surface, so the override roles are the only way past the ownership rule.
+     */
+    private const MANAGE_PERMISSION = null;
 
     /**
      * Listing blocks means listing *your own* — the controller constrains the
@@ -72,19 +79,5 @@ class BlockPolicy
     public function update(User $user, Block $block): bool
     {
         return false;
-    }
-
-    private function isModerator(User $user): bool
-    {
-        return $user->hasAnyRole(self::OVERRIDE_ROLES);
-    }
-
-    private function allows(User $user, string $permission): bool
-    {
-        try {
-            return $user->hasPermissionTo($permission);
-        } catch (PermissionDoesNotExist) {
-            return false;
-        }
     }
 }

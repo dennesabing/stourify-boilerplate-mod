@@ -7,7 +7,7 @@ namespace Modules\Stourify\Policies;
 use App\Enums\RoleEnum;
 use App\Models\User;
 use Modules\Stourify\Models\SpotAbout;
-use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+use Modules\Stourify\Policies\Concerns\ChecksModeratorAccess;
 
 /**
  * Authorization for About entries.
@@ -26,6 +26,8 @@ use Spatie\Permission\Exceptions\PermissionDoesNotExist;
  */
 class SpotAboutPolicy
 {
+    use ChecksModeratorAccess;
+
     /**
      * @var list<string>
      */
@@ -35,6 +37,11 @@ class SpotAboutPolicy
         RoleEnum::SUPER_ADMIN->value,
         RoleEnum::SITE_ADMIN->value,
     ];
+
+    /**
+     * The module permission that also confers moderator standing here.
+     */
+    private const MANAGE_PERMISSION = 'stourify.spot_abouts.manage';
 
     public function viewAny(User $user): bool
     {
@@ -80,26 +87,6 @@ class SpotAboutPolicy
 
     public function forceDelete(User $user, SpotAbout $about): bool
     {
-        return $user->hasAnyRole([RoleEnum::SUPER_ADMIN->value]);
-    }
-
-    private function isModerator(User $user): bool
-    {
-        return $user->hasAnyRole(self::OVERRIDE_ROLES)
-            || $this->allows($user, 'stourify.spot_abouts.manage');
-    }
-
-    /**
-     * A permission that has never been seeded is not a permission the user
-     * holds. Spatie throws rather than returning false, so the absence of a
-     * permission row would otherwise be a 500 instead of a 403.
-     */
-    private function allows(User $user, string $permission): bool
-    {
-        try {
-            return $user->hasPermissionTo($permission);
-        } catch (PermissionDoesNotExist) {
-            return false;
-        }
+        return $this->holdsAnyRole($user, [RoleEnum::SUPER_ADMIN->value]);
     }
 }
