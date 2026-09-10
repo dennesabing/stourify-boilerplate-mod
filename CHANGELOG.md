@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`StourifyRigAccountSeeder` gives the test rig a login of its own (STOURIFY-253).** Until now
+  the only signed-in session on the emulator belonged to a fixture with no organization. It was
+  made on purpose to show what a refusal looks like, and then left in place. Every
+  organization-scoped endpoint refused it with `403`, and because no other login was written down
+  anywhere, signing it out could not be undone. One key was doing two opposite jobs.
+  - The new seeder creates a separate, ordinary explorer: verified, active, and enrolled in
+    Stourify Public through the same `JoinPublicOrganizationAsExplorer::enrol()` path that
+    registration uses.
+  - Its email and password come from `STOURIFY_RIG_EMAIL` and `STOURIFY_RIG_PASSWORD` in the
+    gitignored `saas-boilerplate/.env`, through the new `config('stourify.rig_account')`. Nothing
+    is hardcoded, and a changed `.env` password is picked up on the next run.
+  - It does nothing when those are unset and refuses production outright, so it sits safely in
+    `Module::seeders()`.
+  - Unlike `StourifyExplorerBackfillSeeder`, it touches exactly one row, so the no-organization
+    fixtures other cards depend on stay as they are.
+  - Recreate it with
+    `php artisan db:seed --class="Modules\Stourify\Database\Seeders\StourifyRigAccountSeeder"`.
+
 ### Changed
 
 - **The six remaining policies stopped working a viewer's permissions out from scratch on every
