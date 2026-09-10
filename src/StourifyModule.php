@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Modules\Stourify\Database\Seeders\StourifyDemoContentSeeder;
 use Modules\Stourify\Database\Seeders\StourifyExplorerBackfillSeeder;
 use Modules\Stourify\Database\Seeders\StourifyPublicOrganizationSeeder;
+use Modules\Stourify\Database\Seeders\StourifyRigAccountSeeder;
 use Modules\Stourify\Models\Block;
 use Modules\Stourify\Models\City;
 use Modules\Stourify\Models\ExplorerProfile;
@@ -256,6 +257,9 @@ class StourifyModule implements Module
             // Content must land in the public organization or no explorer can
             // see it — organization scoping hides it with no error at all.
             StourifyDemoContentSeeder::class,
+            // The test rig's login. A no-op unless STOURIFY_RIG_* is set, and it
+            // refuses production outright, so it is safe on every deploy.
+            StourifyRigAccountSeeder::class,
         ];
     }
 

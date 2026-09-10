@@ -47,6 +47,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | The test rig's login
+    |--------------------------------------------------------------------------
+    |
+    | One ordinary explorer account that live runs sign the app in with. A
+    | spare key kept in a known drawer: nobody's personal key, and nobody
+    | uses it to test what happens without one.
+    |
+    | Both values are read from the gitignored saas-boilerplate/.env and
+    | nowhere else. Leave them unset and StourifyRigAccountSeeder does
+    | nothing, which is what every deploy needs. It also refuses to run in
+    | production whatever these say, because a login whose password sits in
+    | a developer's .env does not belong on a live install.
+    |
+    | Recreate it from nothing with:
+    |   php artisan db:seed --class="Modules\Stourify\Database\Seeders\StourifyRigAccountSeeder"
+    |
+    */
+
+    'rig_account' => [
+        'email' => env('STOURIFY_RIG_EMAIL'),
+        'password' => env('STOURIFY_RIG_PASSWORD'),
+        'name' => env('STOURIFY_RIG_NAME', 'Stourify Rig'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Discovery defaults
     |--------------------------------------------------------------------------
     */
