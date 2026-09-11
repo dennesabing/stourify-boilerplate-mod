@@ -162,6 +162,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **The system-owner reset test expects the web form's new neutral reply (STOURIFY-271).**
+  saas-boilerplate's `POST /forgot-password` now answers every well-formed address with the same
+  success message, so it no longer tells a stranger which addresses have accounts.
+  `tests/Feature/PublicOrganizationSeederTest.php` → "the seeded owner cannot be taken over through a
+  password reset" expected the old "We can't find a user…" field error for the inactive system owner.
+  It now expects the neutral reply and no field error. It still proves no reset mail is sent and no
+  reset token is written. Test-only; no module code changed.
 - **Nobody can sign in as, or take over, the account that owns Stourify Public (STOURIFY-267).**
   `StourifyPublicOrganizationSeeder` runs on every deploy. When no users existed, it created a
   "Stourify System" owner that was active and verified. Its password was random and thrown away, but

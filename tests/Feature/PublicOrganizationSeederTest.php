@@ -103,8 +103,12 @@ test('the seeded owner cannot be taken over through a password reset', function 
 
     $email = User::sole()->email;
 
+    // Both routes answer with the neutral reply every address gets, so the
+    // caretaker account looks exactly like one that does not exist.
     $this->postJson('/api/v1/forgot-password', ['email' => $email])->assertStatus(200);
-    $this->post(route('password.email'), ['email' => $email])->assertSessionHasErrors('email');
+    $this->post(route('password.email'), ['email' => $email])
+        ->assertSessionHas('success', __('messages.password_reset_link_sent'))
+        ->assertSessionHasNoErrors();
 
     Notification::assertNothingSent();
     expect(DB::table('password_reset_tokens')->count())->toBe(0);
