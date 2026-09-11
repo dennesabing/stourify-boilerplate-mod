@@ -160,6 +160,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same question, through `Gate::denies` instead of `authorize()`, only so the answer has
   somewhere to put a reason. No role, permission, seeder, migration or route was touched.
 
+### Security
+
+- **Nobody can sign in as, or take over, the account that owns Stourify Public (STOURIFY-267).**
+  `StourifyPublicOrganizationSeeder` runs on every deploy. When no users existed, it created a
+  "Stourify System" owner that was active and verified. Its password was random and thrown away, but
+  a password reset would mail a link to anyone who could read that address, and they would then own
+  the public organization.
+  - The system owner is now created with `is_active = false`. Both sign-in routes refuse it, and the
+    platform's password reset now skips inactive accounts (saas-boilerplate, same card).
+  - The owner fallback now does what its docblock always promised. It prefers an active
+    platform-wide admin: Super Admin or Site Admin on a role that belongs to no organization, the
+    same test as `User::isGlobalAdmin()`. It no longer takes "the oldest user of any kind". A database
+    with only ordinary users gets the inactive system owner, never a consumer as owner.
+  - An organization that already exists is left alone, owner included. The seeder now returns
+    before choosing an owner at all, so a deploy onto a database that has the organization but no
+    admin no longer creates a spare system account.
+  - `tests/Feature/PublicOrganizationSeederTest.php` pins what a bare production seed (no
+    `SEED_PASSWORD`) may create: one organization, one owner, and that owner inactive, refused by
+    `POST /api/v1/login` even with a known password, and sent no reset link on either route.
+  - **This does not change data already on a live database.** An existing system owner row stays as
+    it is. Whether it is active, and who owns Stourify Public there, is STOURIFY-268.
+
 ## [0.13.0] - 2026-08-28
 
 ### Changed
