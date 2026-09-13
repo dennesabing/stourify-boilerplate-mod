@@ -63,7 +63,8 @@ The app uses your device's location, **while you are using the app only**.
 ### 2.5 Camera and photos
 
 The app requests camera access (`CAMERA`) and access to your photo library (`READ_MEDIA_IMAGES`) so
-you can attach images to spots and posts. It only reads the images you actually select or capture.
+you can attach images to spots and posts. It only reads the images you actually select or capture,
+and it only accepts photos — it does not let you attach videos.
 
 **Photo metadata is removed on your device before anything is uploaded.** A camera writes hidden
 information into a photo file — the time the picture was taken, the make and model of the phone, and,
@@ -73,11 +74,11 @@ them. That hidden information is called EXIF metadata. The app strips it out on 
 the file leaves it — so the coordinates are never sent to us, never stored on our servers, and never
 present in the publicly accessible image file.
 
-> **What this does not cover.** The removal applies to JPEG photos, which is what the camera produces
-> and what nearly every photo in your gallery is. Two things are **not** stripped yet: image files in
-> other formats (such as PNG or HEIC), and **videos**, which can carry coordinates of their own. If
-> you are uploading either of those and the location matters to you, remove the metadata yourself
-> first.
+> **What this does not cover.** The removal applies to JPEG and PNG images, which is what the camera
+> produces and what nearly every photo and screenshot in your gallery is. Images in other formats
+> (such as HEIC) are **not** stripped yet; if you upload one of those and the location matters to
+> you, remove the metadata yourself first. Videos can carry coordinates of their own, which is why
+> the app does not accept them.
 
 ### 2.6 Technical information
 
