@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A test that every handle the backfill hands out is one its owner can keep or change
+  (STOURIFY-91).** `ExplorerBackfillHandleTest` runs `StourifyExplorerBackfillSeeder` over awkward
+  names: the same name three times, a handle taken in another organization, accents, a non-Latin
+  script, punctuation only, blank, two letters, 60 characters, dots, and an emoji. Each account then
+  saves its generated handle, unchanged, through the real `PATCH /api/v1/profile`. It also checks
+  that another account can't take a backfilled handle, and that deleted accounts get no profile. The
+  generator already met every rule, so no application code changed. Widening its length cap turns
+  the test red.
+
 ### Changed
 
 - **The privacy policy's photo section matches what the app now removes (STOURIFY-45).** §2.5 now
