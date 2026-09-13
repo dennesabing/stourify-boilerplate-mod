@@ -85,6 +85,19 @@ it('describes photo metadata as stripped on the device, and still names what is 
         ->and($text)->toContain('video');
 });
 
+it('says PNG is stripped, video is not accepted, and HEIC is still not covered', function (): void {
+    // STOURIFY-45 moved two lines at once: the app now strips PNG as well as
+    // JPEG, and it stopped offering videos because nothing could clean one. The
+    // page must say both, and must stop listing PNG among the formats left
+    // untouched — while still naming HEIC, which really is.
+    $text = strtolower(strip_tags($this->get('/privacy')->assertOk()->getContent()));
+
+    expect($text)->toContain('jpeg and png images')
+        ->and($text)->toContain('does not let you attach videos')
+        ->and($text)->toContain('heic')
+        ->and($text)->not->toContain('such as png or heic');
+});
+
 it('does not claim collection the app does not perform', function (): void {
     $text = strtolower(strip_tags($this->get('/privacy')->assertOk()->getContent()));
 

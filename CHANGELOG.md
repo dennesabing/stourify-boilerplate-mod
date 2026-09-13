@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The privacy policy's photo section matches what the app now removes (STOURIFY-45).** §2.5 now
+  says JPEG **and PNG** metadata is stripped. It says the app accepts photos only and doesn't let you
+  attach videos, because a video's recorded location can't be removed yet. It still names HEIC as not
+  stripped. `LegalDocumentsTest` pins all three, including that PNG is no longer listed as
+  untouched.
+
 ## [0.14.0] - 2026-09-12
 
 ### Added
