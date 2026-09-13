@@ -105,6 +105,11 @@ class SpotResource extends BaseResource
             // a page of 25 costs one query, not 25.
             'tags' => $this->whenLoaded('tags', fn (): array => $this->hashtagsOf($spot), []),
 
+            // The spot's public web page, for the app's Share button — or null
+            // when it has none (not published, or a private account's), so the
+            // app never offers a link that opens a 404 (STOURIFY-301).
+            'share_url' => $spot->publicShareUrl(),
+
             'created_at' => $spot->created_at?->toIso8601String(),
             'updated_at' => $spot->updated_at?->toIso8601String(),
 

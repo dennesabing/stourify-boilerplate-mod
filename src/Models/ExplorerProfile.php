@@ -89,8 +89,15 @@ class ExplorerProfile extends Model
             // `wasChanged()` is false straight after an insert. The second
             // clause catches the contributor who publishes spots first and
             // fills in their profile — already switched off — afterwards.
+            //
+            // `is_private` is here for the public spot page (STOURIFY-301): a
+            // private account's spots have no page on the web, and that page is
+            // cached under the same `Spot:list` tag. Somebody who makes their
+            // account private must not stay public until the cache expires.
             if ($profile->wasChanged('shows_location_on_spots')
-                || ($profile->wasRecentlyCreated && $profile->shows_location_on_spots === false)) {
+                || $profile->wasChanged('is_private')
+                || ($profile->wasRecentlyCreated
+                    && ($profile->shows_location_on_spots === false || $profile->is_private === true))) {
                 self::forgetCachedSpotLocations();
             }
         });

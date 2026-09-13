@@ -223,6 +223,66 @@ class Spot extends Model implements HasMedia
                 ->where('sto_explorer_profiles.shows_location_on_spots', false)));
     }
 
+    /**
+     * Spots that have a public page on the web (STOURIFY-301): published, and
+     * contributed by somebody whose account is not private.
+     *
+     * A contributor with no profile row counts as public, the same way the
+     * location rule reads a missing profile as "shown" — most spots predate any
+     * profile, and reading absence as private would take most of the catalogue
+     * off the web the day this shipped.
+     *
+     * @param  Builder<Spot>  $query
+     * @return Builder<Spot>
+     */
+    public function scopePubliclyShareable(Builder $query): Builder
+    {
+        return $query
+            ->published()
+            ->whereNotExists(fn ($sub) => $sub
+                ->selectRaw('1')
+                ->from('sto_explorer_profiles')
+                ->whereColumn('sto_explorer_profiles.user_id', 'sto_spots.user_id')
+                ->where('sto_explorer_profiles.is_private', true));
+    }
+
+    /**
+     * The same rule as `scopePubliclyShareable()`, asked of one loaded spot.
+     *
+     * It reads the eager-loaded `contributorProfile` (see `$with`), so asking
+     * it of every row in a list costs nothing.
+     */
+    public function isPubliclyShareable(): bool
+    {
+        if ($this->trashed() || ! in_array($this->status?->value, SpotStatus::discoverable(), true)) {
+            return false;
+        }
+
+        $profile = $this->relationLoaded('contributorProfile')
+            ? $this->getRelation('contributorProfile')
+            : $this->contributorProfile()->first();
+
+        return $profile?->is_private !== true;
+    }
+
+    /**
+     * The link the app's Share button hands out, or `null` when this spot has
+     * no public page — a Share button that sends a friend to a 404 is worse
+     * than no button.
+     *
+     * The host comes from `stourify.share.base_url`, never from code.
+     */
+    public function publicShareUrl(): ?string
+    {
+        $base = rtrim((string) config('stourify.share.base_url'), '/');
+
+        if ($base === '' || ! $this->isPubliclyShareable()) {
+            return null;
+        }
+
+        return "{$base}/s/{$this->uuid}";
+    }
+
     public function city(): BelongsTo
     {
         return $this->belongsTo(City::class);

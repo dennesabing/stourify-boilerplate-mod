@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A public, read-only page for each spot: `GET /api/v1/public/spots/{uuid}` (STOURIFY-301).** It
+  needs no login, so a link sent to WhatsApp opens for somebody without the app. Only a published
+  spot in the public organization, from an account that isn't private, has one. Everything else is a
+  404, never a 403, so a stranger can't tell "private" from "doesn't exist".
+  - `PublicSpotResource` is an allow-list. It carries the name, description, categories, city, one
+    photo, rating and `share_url`, and never an email, a user id, `status` or `can`.
+  - If the contributor hid their location, the coordinates **and the street address** are left
+    out.
+  - It is limited to 60 requests a minute per IP and read from the cache. Going private or hiding
+    your location takes effect on the next request.
+  - `SpotResource` gains `share_url`, the link the app's Share button hands out. It is `null` when
+    the spot has no public page.
+  - The host comes from `stourify.share.base_url` (`STOURIFY_SHARE_BASE_URL`, default
+    `https://stourify.com`).
+
 - **A test that every handle the backfill hands out is one its owner can keep or change
   (STOURIFY-91).** `ExplorerBackfillHandleTest` runs `StourifyExplorerBackfillSeeder` over awkward
   names: the same name three times, a handle taken in another organization, accents, a non-Latin
