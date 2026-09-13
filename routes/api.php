@@ -9,6 +9,7 @@ use Modules\Stourify\Http\Controllers\Api\V1\FollowApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\PostApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\PostCommentApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ProfileApiController;
+use Modules\Stourify\Http\Controllers\Api\V1\PublicSpotApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReportApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\ReviewApiController;
 use Modules\Stourify\Http\Controllers\Api\V1\SearchApiController;
@@ -34,6 +35,26 @@ use Modules\Stourify\Http\Controllers\Api\V1\WishlistApiController;
 | UUID, which the client reads from the login response and never hardcodes.
 |
 */
+
+/*
+| The public spot page's data (STOURIFY-301) — the one read in this module that
+| answers with no account, so a link sent to WhatsApp opens for somebody who
+| has never installed the app.
+|
+| It is outside the group below on purpose, and leaving off `auth:sanctum` is
+| not the gate: PublicSpotShowRequest says why it authorises everyone, and
+| PublicSpotApiController applies the visibility rule, answering 404 for any
+| spot that is not public. `throttle:60,1,public-spot` keys on the caller's IP
+| with its own counter, the same form the boilerplate's public auth routes use.
+*/
+Route::middleware(['api', 'throttle:60,1,public-spot'])
+    ->prefix('api/v1/public')
+    ->name('api.v1.public.')
+    ->group(function (): void {
+        Route::get('/spots/{uuid}', [PublicSpotApiController::class, 'show'])
+            ->whereUuid('uuid')
+            ->name('spots.show');
+    });
 
 Route::middleware(['api', 'auth:sanctum', 'set_organization_from_header'])
     ->prefix('api/v1')

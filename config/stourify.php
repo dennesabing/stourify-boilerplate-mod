@@ -77,6 +77,23 @@ return [
     |--------------------------------------------------------------------------
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Sharing a spot outside the app
+    |--------------------------------------------------------------------------
+    |
+    | Where a spot's public page lives: `<base_url>/s/<spot-uuid>`, served by
+    | web-front on the apex host (STOURIFY-301). The app's Share button hands
+    | out this link, so it must be the address of the public site on the tier
+    | the app is talking to. Dev sets its own in `.env`; production uses the
+    | default, because its deploy does not edit `.env`.
+    |
+    */
+
+    'share' => [
+        'base_url' => env('STOURIFY_SHARE_BASE_URL', 'https://stourify.com'),
+    ],
+
     'discovery' => [
         // Default radius for /spots/nearby, in kilometres.
         'default_radius_km' => (float) env('STOURIFY_DEFAULT_RADIUS_KM', 5.0),
