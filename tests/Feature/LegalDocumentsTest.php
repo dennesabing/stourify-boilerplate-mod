@@ -98,6 +98,20 @@ it('says PNG is stripped, video is not accepted, and HEIC is still not covered',
         ->and($text)->not->toContain('such as png or heic');
 });
 
+it('says a video that reaches the server another way loses its location, and what it keeps', function (): void {
+    // STOURIFY-314 taught the server to blank the location label in MP4 and
+    // QuickTime videos that arrive from a caller other than the app. The page
+    // must say so, keep saying the app itself takes no video, and name the two
+    // things a video still carries: its recording time, and the GPS track some
+    // action cameras and drones record alongside the picture.
+    $text = strtolower(strip_tags($this->get('/privacy')->assertOk()->getContent()));
+
+    expect($text)->toContain('mp4 and quicktime')
+        ->and($text)->toContain('does not let you attach videos')
+        ->and($text)->toContain('time the video was recorded')
+        ->and($text)->toContain('separate data track');
+});
+
 it('does not claim collection the app does not perform', function (): void {
     $text = strtolower(strip_tags($this->get('/privacy')->assertOk()->getContent()));
 

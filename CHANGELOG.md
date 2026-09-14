@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Privacy policy §2.5 now says what happens to a video that reaches the server another way
+  (STOURIFY-314).** The server blanks the location and device labels in MP4 and QuickTime videos,
+  and the "what this does not cover" box now says so. It still says the app doesn't accept videos,
+  and it names what stays in the file: the recording time, and the GPS data track some action
+  cameras and drones record (STOURIFY-327). `tests/Feature/LegalDocumentsTest.php` pins the
+  wording. The legal pages are still unreviewed drafts (STOURIFY-206).
+
 ### Added
 
 - **`GET /profile` and `GET /profiles/{user}` now carry the explorer's photo as `avatar_url`
