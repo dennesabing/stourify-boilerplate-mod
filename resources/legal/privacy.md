@@ -78,7 +78,10 @@ present in the publicly accessible image file.
 > produces and what nearly every photo and screenshot in your gallery is. Images in other formats
 > (such as HEIC) are **not** stripped yet; if you upload one of those and the location matters to
 > you, remove the metadata yourself first. Videos can carry coordinates of their own, which is why
-> the app does not accept them.
+> the app does not accept them. If a video reaches our servers some other way, such as through our
+> API, the server blanks the location and device labels a phone writes into MP4 and QuickTime
+> videos before the file is stored. Two things stay in the file: the time the video was recorded,
+> and the route that some action cameras and drones record as a separate data track inside it.
 
 ### 2.6 Technical information
 
