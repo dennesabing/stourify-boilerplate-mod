@@ -66,6 +66,16 @@ class ProfileResource extends BaseResource
             // and once as the handle (found on the live run for STOURIFY-35).
             'name' => $this->whenLoaded('user', fn () => $profile->user->name),
 
+            // The explorer's photo, the same `medium` conversion every post and
+            // review already sends as `author.avatar_url`, so again nothing new
+            // is exposed. Without it a phone had nowhere to read its own photo
+            // back from: login answers with a bare user that carries none, so
+            // an uploaded photo vanished from your own header at the next
+            // sign-in (STOURIFY-307). `null`, never absent, when there is none.
+            'avatar_url' => $this->whenLoaded(
+                'user', fn (): ?string => $profile->user->getFirstMediaUrl('avatar', 'medium') ?: null
+            ),
+
             'username' => $profile->username,
             'bio' => $profile->bio,
             'website' => $profile->website,
