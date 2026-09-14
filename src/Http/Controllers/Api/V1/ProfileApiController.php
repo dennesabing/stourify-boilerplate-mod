@@ -59,7 +59,7 @@ class ProfileApiController extends Controller
         }
 
         return $this->success(
-            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user', 'homeCity'])))),
+            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user.media', 'homeCity'])))),
         );
     }
 
@@ -75,7 +75,7 @@ class ProfileApiController extends Controller
         $this->authorize('view', $profile);
 
         return $this->success(
-            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user', 'homeCity'])))),
+            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user.media', 'homeCity'])))),
         );
     }
 
@@ -111,7 +111,7 @@ class ProfileApiController extends Controller
         }
 
         return $this->success(
-            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user', 'homeCity'])))),
+            new ProfileResource($this->withViewerState($this->withCounts($profile->load(['user.media', 'homeCity'])))),
             $status,
             $message,
         );

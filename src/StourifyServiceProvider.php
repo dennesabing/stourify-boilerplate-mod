@@ -8,6 +8,7 @@ use App\Events\Domain\UserDeleted;
 use App\Events\Domain\UserRegistered;
 use App\Models\Media;
 use App\Models\Reaction;
+use App\Models\User;
 use App\Providers\ModuleBaseServiceProvider;
 use App\Registries\LegalDocumentRegistry;
 use App\Registries\ModuleRegistry;
@@ -16,6 +17,7 @@ use Illuminate\Cache\Events\CacheFlushed;
 use Illuminate\Cache\Events\ForgettingKey;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
+use Modules\Stourify\Listeners\ForgetAuthorListsWhenAnExplorerChanges;
 use Modules\Stourify\Listeners\JoinPublicOrganizationAsExplorer;
 use Modules\Stourify\Listeners\RemoveExplorerContentOnUserDeleted;
 use Modules\Stourify\Listeners\TouchSpotWhenItsPhotosChange;
@@ -138,6 +140,16 @@ class StourifyServiceProvider extends ModuleBaseServiceProvider
         Event::listen(MediaHasBeenAddedEvent::class, [TouchSpotWhenItsPhotosChange::class, 'onMediaAdded']);
         Event::listen(ConversionHasBeenCompletedEvent::class, [TouchSpotWhenItsPhotosChange::class, 'onConversionCompleted']);
         Media::deleted(fn (Media $media) => app(TouchSpotWhenItsPhotosChange::class)->onMediaDeleted($media));
+
+        // A page of posts, comments, reviews, abouts or follows is cached with
+        // each author's name and photo copied inside it. The platform writes
+        // both (`PUT /me`, `POST|DELETE /me/avatar`) and may not name this
+        // module, so this module listens for the change and drops its copies —
+        // or a rename would read as the old name for up to an hour. See
+        // ForgetAuthorListsWhenAnExplorerChanges (STOURIFY-307).
+        User::updated(fn (User $user) => app(ForgetAuthorListsWhenAnExplorerChanges::class)->onUserUpdated($user));
+        Event::listen(MediaHasBeenAddedEvent::class, [ForgetAuthorListsWhenAnExplorerChanges::class, 'onMediaAdded']);
+        Media::deleted(fn (Media $media) => app(ForgetAuthorListsWhenAnExplorerChanges::class)->onMediaDeleted($media));
 
         // The policies remember a viewer's permission answers for the length
         // of one request (AuthorizationMemo — it removed about 2.7 seconds

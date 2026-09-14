@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`GET /profile` and `GET /profiles/{user}` now carry the explorer's photo as `avatar_url`
+  (STOURIFY-307).** It's the same `medium` conversion every post and review already sends as
+  `author.avatar_url`, so nothing new becomes public. It's `null` when there's no photo, never
+  missing. Until now the app had nowhere to read its own photo back from, because login answers
+  with a user that has none. `ProfileApiController` eager-loads `user.media` for it.
+
 - **A public, read-only page for each spot: `GET /api/v1/public/spots/{uuid}` (STOURIFY-301).** It
   needs no login, so a link sent to WhatsApp opens for somebody without the app. Only a published
   spot in the public organization, from an account that isn't private, has one. Everything else is a
@@ -40,6 +46,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attach videos, because a video's recorded location can't be removed yet. It still names HEIC as not
   stripped. `LegalDocumentsTest` pins all three, including that PNG is no longer listed as
   untouched.
+
+### Fixed
+
+- **A new display name or photo shows on posts at once, not up to an hour later (STOURIFY-307).**
+  Cached pages of posts, comments, reviews, spot abouts and follows carry each author's name and
+  photo copied inside them. Nothing cleared those pages when either changed, because the name and
+  the photo are written by platform routes (`PUT /me`, `POST|DELETE /me/avatar`) that may not name
+  this module. The new `ForgetAuthorListsWhenAnExplorerChanges` listener clears those five list
+  caches when:
+  - a user's `name` changes (`User::updated`), or
+  - a media row in a user's `avatar` collection is added or deleted.
+
+  `ProfilePhotoAndNameTest` reads the same list before and after each change, so it fails on a
+  stale cache and not only on a cold one.
 
 ## [0.14.0] - 2026-09-12
 
